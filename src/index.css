@@ -1,0 +1,281 @@
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --bg: #ffffff;
+  --bg-tape: #f6f6f4;
+  --ink: #1d1d1f;
+  --muted: #86868b;
+  --line: rgba(0, 0, 0, 0.08);
+  --answer: #1d7a4c;
+  --answer-hover: #159a5a;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.12);
+  --radius: 12px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #2c2c2e;
+    --bg-tape: #232325;
+    --ink: #f5f5f7;
+    --muted: #98989d;
+    --line: rgba(255, 255, 255, 0.1);
+    --answer: #63d392;
+    --answer-hover: #7ee2a8;
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+}
+body {
+  font-family: var(--font);
+  font-weight: 400;
+  background: #d8d8d4;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+input, button, textarea {
+  font-family: var(--font);
+  font-weight: 400;
+}
+
+@media (prefers-color-scheme: dark) {
+  body { background: #1c1c1e; }
+}
+
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--answer); outline-offset: 2px; }
+
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: start center;
+  padding: 18vh 16px 40px;
+}
+
+.page-hint {
+  margin-top: 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+.page-hint kbd {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.spotlight {
+  width: min(680px, calc(100vw - 24px));
+  background: var(--bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font);
+}
+
+.spotlight-embedded {
+  width: 100%;
+  box-shadow: none;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(88px, 30%);
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 8px 14px 8px 10px;
+  background: var(--bg);
+}
+
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.modes button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+.modes button.active {
+  color: var(--answer);
+  background: color-mix(in srgb, var(--answer) 12%, transparent);
+}
+
+.quick-plain {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  outline: none;
+  padding: 0;
+}
+.quick-plain::placeholder {
+  color: var(--muted);
+}
+.math-host {
+  min-width: 0;
+  min-height: 32px;
+}
+.math-host math-field,
+.static-math math-field {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 22px;
+  outline: none;
+  --caret-color: var(--ink);
+  --hue: 145;
+  --contains-highlight-background-color: color-mix(in srgb, var(--answer) 16%, transparent);
+}
+.math-host math-field:focus-within { outline: none; }
+.math-host math-field::part(virtual-keyboard-toggle),
+.math-host math-field::part(menu-toggle),
+.static-math math-field::part(virtual-keyboard-toggle),
+.static-math math-field::part(menu-toggle) {
+  display: none;
+}
+
+.live {
+  border: 0;
+  background: transparent;
+  color: var(--answer);
+  font-family: var(--font);
+  font-size: 22px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.022em;
+  text-align: right;
+  min-height: 36px;
+  padding: 4px 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 8px;
+}
+.live:hover:not(:disabled) {
+  color: var(--answer-hover);
+  background: color-mix(in srgb, var(--answer) 10%, transparent);
+}
+.live:disabled, .live.empty {
+  color: var(--muted);
+  cursor: default;
+}
+.live.copied { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; }
+
+.tape {
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg-tape);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px;
+  overscroll-behavior: contain;
+}
+.tape-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(88px, 30%);
+  gap: 10px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.tape-row.selected,
+.tape-row:hover {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.tape-q {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 0;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+.tape-a {
+  border: 0;
+  background: transparent;
+  color: var(--answer);
+  font-family: var(--font);
+  font-size: 20px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 4px;
+  border-radius: 6px;
+}
+.tape-a:hover {
+  color: var(--answer-hover);
+  background: color-mix(in srgb, var(--answer) 12%, transparent);
+}
+
+.quick-app {
+  min-height: 0;
+  background: var(--bg);
+}
+html:has(.quick-app),
+html:has(.quick-app) body,
+html:has(.quick-app) #root {
+  height: auto;
+  min-height: 0;
+  background: var(--bg);
+}
+
+html.quick-native,
+html.quick-native body,
+html.quick-native #root {
+  background: transparent !important;
+}
+html.quick-native .quick-app {
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+}
+html.quick-native .spotlight,
+html.quick-native .composer {
+  background: transparent;
+}
+html.quick-native .tape {
+  background: color-mix(in srgb, var(--bg-tape) 90%, transparent);
+}
