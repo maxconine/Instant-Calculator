@@ -3,7 +3,7 @@ import { evaluateSheet } from '../engine/evaluate'
 import { clampSigFigs, DEFAULT_SIG_FIGS } from '../engine/format'
 import { defaultUnitsEqual, isImproperUnitConversion, sanitizeDefaultUnits, type DefaultUnits } from '../engine/units'
 import { UnitSettings } from './UnitSettings'
-import { insertableHistoryAnswer, visibleAnswer, type AnswerForm } from '../lib/answer'
+import { hasDualAnswer, insertableAnswer, insertableHistoryAnswer, visibleAnswer, type AnswerForm } from '../lib/answer'
 import {
   clampDraftSeconds,
   DEFAULT_DRAFT_SECONDS,
@@ -374,25 +374,45 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     flashCopied()
   }, [flashCopied, history, selected, settings.answerForm, shownLive])
 
+  const insertPlain = useCallback((chunk: string) => {
+    if (!chunk) return
+    mathRef.current?.insert(chunk)
+    mathRef.current?.focus()
+    setSelected(null)
+    setTapeOpen(false)
+  }, [])
+
   const insertHistoryAnswer = useCallback(
     (index: number) => {
       const row = history[index]
       if (!row) return
-      const chunk = insertableHistoryAnswer(row, settings.answerForm)
-      if (!chunk) return
-      mathRef.current?.insert(chunk)
-      mathRef.current?.focus()
-      setSelected(null)
-      setTapeOpen(false)
+      insertPlain(insertableHistoryAnswer(row, settings.answerForm))
     },
-    [history, settings.answerForm],
+    [history, insertPlain, settings.answerForm],
+  )
+
+  const copyValue = useCallback(
+    (text: string) => {
+      if (!text || isImproperUnitConversion(text)) return
+      copyText(text)
+      flashCopied()
+    },
+    [flashCopied],
   )
 
   const copyLive = useCallback(() => {
-    if (!shownLive || isImproperUnitConversion(shownLive)) return
-    copyText(shownLive)
-    flashCopied()
-  }, [flashCopied, shownLive])
+    copyValue(shownLive)
+  }, [copyValue, shownLive])
+
+  const copyLiveExact = useCallback(() => {
+    if (!liveExact) return
+    copyValue(insertableAnswer(liveExact))
+  }, [copyValue, liveExact])
+
+  const copyLiveApprox = useCallback(() => {
+    if (!display || isImproperUnitConversion(display)) return
+    copyValue(insertableAnswer(display, liveN))
+  }, [copyValue, display, liveN])
 
   const commit = useCallback(() => {
     const expr = qRef.current
@@ -706,7 +726,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
       className={`spotlight ${embedded ? 'spotlight-embedded' : ''}`}
       onMouseDown={(e) => {
         const t = e.target as HTMLElement
-        if (t.closest('input, button, .tape, .quick-plain, .quick-field, .modes, .unit-settings')) return
+        if (t.closest('input, button, .tape, .quick-plain, .quick-field, .modes, .unit-settings, .live-dual')) return
         nativeHandler()?.postMessage({ type: 'drag' })
       }}
     >
@@ -731,19 +751,45 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
               >
                 {row.expr}
               </button>
-              <button
-                type="button"
-                className="tape-a"
-                title={
-                  settings.answerForm === 'exact' && row.exact
-                    ? 'Insert exact value at the cursor'
-                    : 'Insert approximation at the cursor'
-                }
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => insertHistoryAnswer(i)}
-              >
-                {visibleAnswer(row, settings.answerForm)}
-              </button>
+              {hasDualAnswer(row) ? (
+                <div className="tape-a-dual" role="group" aria-label="History answer">
+                  <button
+                    type="button"
+                    className="tape-a"
+                    title="Insert exact value at the cursor"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertPlain(insertableAnswer(row.exact!))}
+                  >
+                    {row.exact}
+                  </button>
+                  <span className="tape-eq" aria-hidden>
+                    ≈
+                  </span>
+                  <button
+                    type="button"
+                    className="tape-a"
+                    title="Insert approximation at the cursor"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertPlain(insertableAnswer(row.display, row.n))}
+                  >
+                    {row.display}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="tape-a"
+                  title={
+                    settings.answerForm === 'exact' && row.exact
+                      ? 'Insert exact value at the cursor'
+                      : 'Insert approximation at the cursor'
+                  }
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertHistoryAnswer(i)}
+                >
+                  {visibleAnswer(row, settings.answerForm)}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -791,20 +837,50 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
           onUp={onUp}
           onDown={onDown}
         />
-        <button
-          type="button"
-          className={`live ${copied ? 'copied' : ''} ${shownLive ? '' : 'empty'} ${isImproperUnitConversion(shownLive) ? 'message' : ''}`}
-          title={
-            shownLive && !isImproperUnitConversion(shownLive)
-              ? 'Copy to clipboard · ⌘C also copies'
-              : undefined
-          }
-          disabled={!shownLive || isImproperUnitConversion(shownLive)}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={copyLive}
-        >
-          {copied ? 'copied' : shownLive}
-        </button>
+        {copied ? (
+          <button type="button" className="live copied" disabled>
+            copied
+          </button>
+        ) : isImproperUnitConversion(display) ? (
+          <button type="button" className="live message" disabled>
+            {display}
+          </button>
+        ) : hasDualAnswer({ display, exact: liveExact }) && liveExact ? (
+          <div className="live-dual" role="group" aria-label="Answer">
+            <button
+              type="button"
+              className="live live-part"
+              title="Copy exact value"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={copyLiveExact}
+            >
+              {liveExact}
+            </button>
+            <span className="live-eq" aria-hidden>
+              ≈
+            </span>
+            <button
+              type="button"
+              className="live live-part"
+              title="Copy approximation"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={copyLiveApprox}
+            >
+              {display}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={`live ${shownLive ? '' : 'empty'}`}
+            title={shownLive ? 'Copy to clipboard · ⌘C also copies' : undefined}
+            disabled={!shownLive}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={copyLive}
+          >
+            {shownLive}
+          </button>
+        )}
       </div>
     </div>
     {!embedded ? (

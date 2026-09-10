@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertableAnswer, insertableHistoryAnswer, visibleAnswer } from './answer'
+import { hasDualAnswer, insertableAnswer, insertableHistoryAnswer, visibleAnswer } from './answer'
 
 describe('insertableAnswer', () => {
   it('keeps units from the displayed answer', () => {
@@ -168,5 +168,19 @@ describe('visibleAnswer', () => {
   it.each(Array.from({ length: 60 }, (_, i) => String(i)))('no exact %s', (d) => {
     expect(visibleAnswer({ display: d }, 'exact')).toBe(d)
     expect(visibleAnswer({ display: d }, 'approx')).toBe(d)
+  })
+})
+
+describe('hasDualAnswer', () => {
+  it('is true when exact and decimal both exist and differ', () => {
+    expect(hasDualAnswer({ display: '0.866025403784', exact: 'sqrt(3)/2' })).toBe(true)
+    expect(hasDualAnswer({ display: '3.46410161514', exact: '2sqrt(3)' })).toBe(true)
+  })
+
+  it('is false when there is no distinct exact form', () => {
+    expect(hasDualAnswer({ display: '4' })).toBe(false)
+    expect(hasDualAnswer({ display: '4', exact: '4' })).toBe(false)
+    expect(hasDualAnswer({ display: '', exact: 'sqrt(2)' })).toBe(false)
+    expect(hasDualAnswer({ display: 'improper unit conversion', exact: 'sqrt(2)' })).toBe(false)
   })
 })

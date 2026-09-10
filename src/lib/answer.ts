@@ -30,6 +30,14 @@ export type HistoryAnswer = {
   n?: number
 }
 
+/** True when both a closed form and a distinct decimal can be shown. */
+export function hasDualAnswer(row: { display: string; exact?: string }): boolean {
+  const display = row.display.trim()
+  const exact = row.exact?.trim()
+  if (!display || !exact || exact === display) return false
+  return !isImproperUnitConversion(display) && !isImproperUnitConversion(exact)
+}
+
 /** The value shown for a result: exact form by default, decimal when approx is on. */
 export function visibleAnswer(row: { display: string; exact?: string }, form: AnswerForm): string {
   if (form === 'exact' && row.exact) return row.exact

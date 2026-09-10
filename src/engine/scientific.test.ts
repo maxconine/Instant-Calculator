@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertableAnswer } from '../lib/answer'
+import { hasDualAnswer, insertableAnswer } from '../lib/answer'
 import { evaluateLine, evaluateSheet } from './evaluate'
 import {
   extraArithmetic,
@@ -570,6 +570,15 @@ describe('Exact form vs decimal copy', () => {
     expect(r.display).toMatch(/^3\.464/)
     expect(r.display).not.toMatch(/sqrt|≈/)
     expect(dualLabel(r.exact, r.display)).toBe(`2sqrt(3) ≈ ${r.display}`)
+  })
+
+  it('gives sin(π/3) a clickable exact and decimal pair', () => {
+    const r = evaluateLine('sin(pi/3)', { angleMode: 'rad' })
+    expect(r.exact).toBe('sqrt(3)/2')
+    expect(r.display).not.toMatch(/sqrt|≈/)
+    expect(Number(r.display)).toBeCloseTo(Math.sqrt(3) / 2, 8)
+    expect(hasDualAnswer(r)).toBe(true)
+    expect(dualLabel(r.exact, r.display)).toBe(`sqrt(3)/2 ≈ ${r.display}`)
   })
 
   it('inserts the exact radical when that form is chosen', () => {
