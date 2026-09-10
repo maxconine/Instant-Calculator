@@ -1,8 +1,8 @@
 {
-  "name": "instantsolver",
+  "name": "qcalc",
   "private": true,
   "version": "2.0.0",
-  "description": "A Spotlight-style scientific calculator for Mac",
+  "description": "Q Calc — a Spotlight-style scientific calculator for Mac",
   "license": "MIT",
   "repository": {
     "type": "git",

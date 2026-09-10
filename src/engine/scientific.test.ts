@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { insertableAnswer } from '../lib/answer'
 import { evaluateLine, evaluateSheet } from './evaluate'
+import {
+  extraArithmetic,
+  extraCombinatorics,
+  extraConstants,
+  extraEdges,
+  extraExactCopy,
+  extraFractions,
+  extraHyperbolic,
+  extraInverseTrig,
+  extraLatex,
+  extraLogs,
+  extraPowers,
+  extraRadicals,
+  extraRounding,
+  extraSciNotation,
+  extraStats,
+  extraTrigDeg,
+  extraTrigRad,
+  extraTrigSimp,
+} from './scientific.extras'
 import { dualLabel } from './simplify'
 
 type Angle = 'deg' | 'rad'
@@ -106,6 +126,7 @@ suite('Basic Arithmetic & Order of Operations', [
   { name: 'Implicit Multiplication (Paren)', input: '3(4 + 5)', expected: 27 },
   { name: 'Juxtaposition Multiplication', input: '(2+3)(4+5)', expected: 45 },
   { name: 'Left-to-Right Division Precedence', input: '100 / 5 / 2', expected: 10 },
+  ...extraArithmetic(),
 ])
 
 suite('Fractions & Decimals', [
@@ -132,6 +153,7 @@ suite('Fractions & Decimals', [
   { name: 'Percent Of Expression', input: '25 % of 80', display: '20' },
   { name: 'What is percent of', input: 'what is 40% of 90', expected: 36 },
   { name: 'What is percent of (capitalized)', input: 'What is 40% of 90?', expected: 36 },
+  ...extraFractions(),
 ])
 
 suite('Exponents, Powers & Roots', [
@@ -156,6 +178,7 @@ suite('Exponents, Powers & Roots', [
   { name: 'Ten Power Button (10^x)', input: '10^4', expected: 10_000 },
   { name: 'Base e Exponent (e^x)', input: 'e^2', expected: Math.E ** 2 },
   { name: 'Negative Rational Power', input: '32^(-3/5)', expected: 0.125 },
+  ...extraPowers(),
 ])
 
 suite('Exponents & Logarithms', [
@@ -174,6 +197,7 @@ suite('Exponents & Logarithms', [
   { name: 'Log Product Rule Verification', input: 'ln(5 * 8)', matches: 'ln(5) + ln(8)' },
   { name: 'Log Quotient Rule Verification', input: 'ln(20 / 4)', matches: 'ln(20) - ln(4)' },
   { name: 'Log Power Rule Verification', input: 'log(10^3)', expected: 3 },
+  ...extraLogs(),
 ])
 
 suite('Trigonometry in Radians (Toggle RAD active)', [
@@ -197,6 +221,7 @@ suite('Trigonometry in Radians (Toggle RAD active)', [
   { name: 'Sine Full Circle', input: 'sin(2*pi)', angleMode: 'rad', expected: 0 },
   { name: 'Cosine Full Circle', input: 'cos(2*pi)', angleMode: 'rad', expected: 1 },
   { name: 'Large Angle Trigonometry', input: 'sin(100*pi)', angleMode: 'rad', expected: 0 },
+  ...extraTrigRad(),
 ])
 
 suite('Trigonometry in Degrees (Toggle DEG active)', [
@@ -220,6 +245,7 @@ suite('Trigonometry in Degrees (Toggle DEG active)', [
   { name: 'Cotangent 30 Degrees', input: 'cot(30)', expected: Math.sqrt(3) },
   { name: 'Sine 15 Degrees', input: 'sin(15)', expected: Math.sin((15 * Math.PI) / 180) },
   { name: 'Degree Mode Identity Check', input: 'sin(37)^2 + cos(37)^2', expected: 1 },
+  ...extraTrigDeg(),
 ])
 
 suite('Inverse Trigonometry', [
@@ -238,6 +264,7 @@ suite('Inverse Trigonometry', [
   { name: 'Inverse Trig Cancellation (DEG)', input: 'arcsin(sin(30))', expected: 30 },
   { name: 'Arccosine Boundary -1 (DEG)', input: 'arccos(-1)', expected: 180 },
   { name: 'Arctangent High Value (DEG)', input: 'arctan(9999999)', expected: 90, eps: 1e-3 },
+  ...extraInverseTrig(),
 ])
 
 suite('Hyperbolic & Inverse Hyperbolic Functions', [
@@ -256,6 +283,7 @@ suite('Hyperbolic & Inverse Hyperbolic Functions', [
   { name: 'Inverse Hyperbolic Tangent', input: 'arctanh(0.5)', expected: Math.atanh(0.5) },
   { name: 'Inverse Hyperbolic Cosecant', input: 'arccsch(1)', expected: Math.asinh(1) },
   { name: 'Inverse Hyperbolic Secant', input: 'arcsech(0.5)', expected: Math.acosh(2) },
+  ...extraHyperbolic(),
 ])
 
 suite('Scientific Notation & Scale', [
@@ -269,6 +297,7 @@ suite('Scientific Notation & Scale', [
   { name: 'Root of Scientific Notation', input: 'sqrt(4 * 10^12)', expected: 2_000_000 },
   { name: 'Auto Scientific Output Conversion', input: '0.0000000000123 * 2', display: /2\.46e-11/i },
   { name: 'Precision Edge Test', input: '1 + 10^(-15)', expected: 1 + 1e-15 },
+  ...extraSciNotation(),
 ])
 
 suite('Constants & Variables', [
@@ -287,6 +316,7 @@ suite('Constants & Variables', [
   { name: 'Chained ans Addition', input: ['10', 'ans + 5', 'ans * 3'], expected: 45 },
   { name: 'Variable in Trigonometry', input: ['theta = pi/4', 'sin(theta)'], angleMode: 'rad', expected: Math.SQRT2 / 2 },
   { name: 'Variable in List', input: ['k = 3', 'mean([1, 2, k, 4])'], expected: 2.5 },
+  ...extraConstants(),
 ])
 
 suite('Statistical Functions & Lists', [
@@ -310,6 +340,7 @@ suite('Statistical Functions & Lists', [
   { name: 'Single Element Mean', input: 'mean([5])', expected: 5 },
   { name: 'Total with Negative Values', input: 'total([-5, -10, 15])', expected: 0 },
   { name: 'Sequence Range Generator', input: '[1...10]', display: '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]' },
+  ...extraStats(),
 ])
 
 suite('Combinatorics, Probability & Randomization', [
@@ -330,6 +361,7 @@ suite('Combinatorics, Probability & Randomization', [
   { name: 'Random Integer List', input: 'randint(1, 100, 5)', listLength: 5 },
   { name: 'Factorial Division', input: '10! / 8!', expected: 90 },
   { name: 'Poker Hand Combination', input: 'nCr(52, 5)', expected: 2_598_960 },
+  ...extraCombinatorics(),
 ])
 
 suite('Rounding & Number Theory Functions', [
@@ -353,6 +385,7 @@ suite('Rounding & Number Theory Functions', [
   { name: 'Modulo Function', input: 'mod(10, 3)', expected: 1 },
   { name: 'Modulo with Decimals', input: 'mod(5.5, 2)', expected: 1.5 },
   { name: 'Modulo Negative Dividend', input: 'mod(-10, 3)', expected: 2 },
+  ...extraRounding(),
 ])
 
 suite('Edge Cases, Domain Errors & Undefined Behavior', [
@@ -374,6 +407,7 @@ suite('Edge Cases, Domain Errors & Undefined Behavior', [
   { name: 'Modulo by Zero', input: 'mod(5, 0)', undefined: true },
   { name: 'Inverse Hyperbolic Cosine Out of Domain', input: 'arccosh(0.5)', undefined: true },
   { name: 'Inverse Hyperbolic Tangent Boundary', input: 'arctanh(1)', undefined: true },
+  ...extraEdges(),
 ])
 
 suite('Radical & Square Root Simplifications', [
@@ -429,6 +463,7 @@ suite('Radical & Square Root Simplifications', [
   { name: 'sqrt(2500)', input: 'sqrt(2500)', exact: '50', expected: 50 },
   { name: 'sqrt(3200)', input: 'sqrt(3200)', exact: '40sqrt(2)', expected: 56.568542495 },
   { name: 'Inserted exact radical evaluates', input: '2sqrt(3)', exact: '2sqrt(3)', expected: 2 * Math.sqrt(3) },
+  ...extraRadicals(),
 ])
 
 suite('Trigonometric & Inverse Trigonometric Simplifications', [
@@ -482,6 +517,7 @@ suite('Trigonometric & Inverse Trigonometric Simplifications', [
   { name: 'tan(7*pi/6)', input: 'tan(7*pi/6)', angleMode: 'rad', exact: 'sqrt(3)/3', expected: 0.577350269 },
   { name: 'sin(pi/12)', input: 'sin(pi/12)', angleMode: 'rad', exact: '(sqrt(6)-sqrt(2))/4', expected: 0.258819045 },
   { name: 'cos(pi/12)', input: 'cos(pi/12)', angleMode: 'rad', exact: '(sqrt(6)+sqrt(2))/4', expected: 0.965925826 },
+  ...extraTrigSimp(),
 ])
 
 function n(text: string, angleMode: Angle = 'deg'): number {
@@ -521,6 +557,10 @@ describe('Additional latex and constant aliases', () => {
     expect(Math.abs(n('cos(2)', 'rad') - Math.cos(2))).toBeLessThan(1e-8)
     expect(Math.abs(n('cos(2)', 'deg') - Math.cos((2 * Math.PI) / 180))).toBeLessThan(1e-8)
   })
+
+  it.each(extraLatex)('$name', (c) => {
+    expect(Math.abs(n(c.input, c.angleMode ?? 'deg') - c.expected)).toBeLessThan(1e-7)
+  })
 })
 
 describe('Exact form vs decimal copy', () => {
@@ -542,5 +582,15 @@ describe('Exact form vs decimal copy', () => {
     const inserted = insertableAnswer(r.display, r.value?.n)
     expect(inserted).not.toMatch(/sqrt/)
     expect(Number(inserted)).toBeCloseTo(Math.sqrt(12), 8)
+  })
+
+  it.each(extraExactCopy)('$name', (c) => {
+    const r = evaluateLine(c.input)
+    expect(r.exact, c.input).toBe(c.exact)
+    expect(r.display, c.input).not.toMatch(/≈/)
+    if (r.exact && r.exact !== r.display) {
+      expect(dualLabel(r.exact, r.display)).toBe(`${r.exact} ≈ ${r.display}`)
+    }
+    expect(insertableAnswer(r.exact ?? r.display)).toBe(r.exact ?? r.display)
   })
 })

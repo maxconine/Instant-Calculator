@@ -4,7 +4,7 @@ import SwiftUI
 import WebKit
 
 extension Notification.Name {
-    static let focusOverlay = Notification.Name("InstantSolver.focusOverlay")
+    static let focusOverlay = Notification.Name("QCalc.focusOverlay")
 }
 
 final class OverlayPanel: NSPanel {
@@ -117,7 +117,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
             pushSoulverResult(soulverPayload(from: message.body))
             return
         }
-        guard message.name == "instant" else { return }
+        guard message.name == "qcalc" else { return }
         if let body = message.body as? String {
             handleMessage(body)
             return
@@ -203,25 +203,25 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
 
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
-        config.userContentController.add(self, name: "instant")
+        config.userContentController.add(self, name: "qcalc")
         config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "soulver")
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         let sigFigs = AppSettings.shared.significantFigures
         let draftSeconds = AppSettings.shared.draftSeconds
         let defaultUnits = AppSettings.shared.defaultUnitsJSON()
+        let answerForm = AppSettings.shared.answerForm
         let boot = WKUserScript(
             source: """
-            window.__INSTANT_NATIVE = true;
-            window.__INSTANT_KEYS = [];
-            window.__INSTANT_HELD = '';
-            window.__INSTANT_META = false;
-            window.__INSTANT_SETTINGS = { sigFigs: \(sigFigs), draftSeconds: \(draftSeconds), defaultUnits: \(defaultUnits) };
-            window.__instantNativeResult = window.__instantNativeResult || function (reply) {
-              window.__SOULVER_LAST = reply;
-              window.dispatchEvent(new CustomEvent('instant-soulver', { detail: reply }));
+            window.__QCALC_NATIVE = true;
+            window.__QCALC_KEYS = [];
+            window.__QCALC_HELD = '';
+            window.__QCALC_META = false;
+            window.__QCALC_SETTINGS = { sigFigs: \(sigFigs), draftSeconds: \(draftSeconds), defaultUnits: \(defaultUnits), answerForm: "\(answerForm)" };
+            window.__qcalcNativeResult = window.__qcalcNativeResult || function (reply) {
+              window.dispatchEvent(new CustomEvent('qcalc-soulver', { detail: reply }));
             };
-            window.__instantSelectedText = function () {
+            window.__qcalcSelectedText = function () {
               var el = document.querySelector('.quick-plain');
               if (el && el.selectionStart != null && el.selectionEnd > el.selectionStart) {
                 return el.value.slice(el.selectionStart, el.selectionEnd);
@@ -233,10 +233,10 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
               var sel = window.getSelection();
               return (sel && sel.toString()) || '';
             };
-            window.__instantRememberText = function () {
-              var live = window.__instantSelectedText();
-              if (live) window.__INSTANT_HELD = live;
-              else if (!window.__INSTANT_META) window.__INSTANT_HELD = '';
+            window.__qcalcRememberText = function () {
+              var live = window.__qcalcSelectedText();
+              if (live) window.__QCALC_HELD = live;
+              else if (!window.__QCALC_META) window.__QCALC_HELD = '';
             };
             document.documentElement.classList.add('quick-native');
             document.documentElement.style.overflow = 'hidden';
@@ -244,38 +244,38 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
               if (e.key === 'Escape' || e.keyCode === 27) {
                 e.preventDefault();
                 e.stopPropagation();
-                try { window.webkit.messageHandlers.instant.postMessage('dismiss'); } catch (err) {}
+                try { window.webkit.messageHandlers.qcalc.postMessage({ type: 'dismiss' }); } catch (err) {}
                 return;
               }
-              if (e.key === 'Meta' || e.key === 'Control') window.__INSTANT_META = true;
-              if (e.metaKey || e.ctrlKey) window.__instantRememberText();
+              if (e.key === 'Meta' || e.key === 'Control') window.__QCALC_META = true;
+              if (e.metaKey || e.ctrlKey) window.__qcalcRememberText();
               if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C' || e.keyCode === 67)) {
-                var text = window.__instantSelectedText() || window.__INSTANT_HELD || '';
+                var text = window.__qcalcSelectedText() || window.__QCALC_HELD || '';
                 if (text) {
                   e.preventDefault();
                   e.stopImmediatePropagation();
-                  try { window.webkit.messageHandlers.instant.postMessage({ type: 'copy', text: text }); } catch (err) {}
+                  try { window.webkit.messageHandlers.qcalc.postMessage({ type: 'copy', text: text }); } catch (err) {}
                   return;
                 }
               }
               var field = document.querySelector('.quick-plain');
               if (field && document.activeElement !== field && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-                window.__INSTANT_KEYS.push(e.key);
+                window.__QCALC_KEYS.push(e.key);
               }
             }, true);
             window.addEventListener('keyup', function (e) {
-              if (e.key === 'Meta' || e.key === 'Control') window.__INSTANT_META = false;
-              window.__instantRememberText();
+              if (e.key === 'Meta' || e.key === 'Control') window.__QCALC_META = false;
+              window.__qcalcRememberText();
             }, true);
-            document.addEventListener('select', window.__instantRememberText, true);
-            document.addEventListener('mouseup', window.__instantRememberText, true);
+            document.addEventListener('select', window.__qcalcRememberText, true);
+            document.addEventListener('mouseup', window.__qcalcRememberText, true);
             window.addEventListener('copy', function (e) {
-              var text = window.__instantSelectedText() || window.__INSTANT_HELD || '';
+              var text = window.__qcalcSelectedText() || window.__QCALC_HELD || '';
               if (!text) return;
               e.preventDefault();
               e.stopImmediatePropagation();
               if (e.clipboardData) e.clipboardData.setData('text/plain', text);
-              try { window.webkit.messageHandlers.instant.postMessage({ type: 'copy', text: text }); } catch (err) {}
+              try { window.webkit.messageHandlers.qcalc.postMessage({ type: 'copy', text: text }); } catch (err) {}
             }, true);
             window.addEventListener('wheel', function (e) {
               var t = e.target;
@@ -399,7 +399,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
     }
 
     private func notifyWebWillHide() {
-        web?.evaluateJavaScript("if (window.__instantWillHide) window.__instantWillHide();")
+        web?.evaluateJavaScript("if (window.__qcalcWillHide) window.__qcalcWillHide();")
     }
 
     private func resetAndFocus() {
@@ -407,10 +407,10 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         panel?.makeFirstResponder(web)
         web.evaluateJavaScript("""
         (function () {
-          if (window.__instantReset) window.__instantReset();
+          if (window.__qcalcReset) window.__qcalcReset();
           var el = document.querySelector('.quick-plain');
-          if (el) { el.focus(); if (window.__instantFocus) window.__instantFocus(); }
-          if (window.__instantSize) window.__instantSize();
+          if (el) { el.focus(); if (window.__qcalcFocus) window.__qcalcFocus(); }
+          if (window.__qcalcSize) window.__qcalcSize();
         })()
         """)
     }
@@ -421,7 +421,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         web.evaluateJavaScript("""
         (function () {
           var el = document.querySelector('.quick-plain');
-          if (el) { el.focus(); if (window.__instantFocus) window.__instantFocus(); }
+          if (el) { el.focus(); if (window.__qcalcFocus) window.__qcalcFocus(); }
         })()
         """)
     }
@@ -519,7 +519,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
     private func observeSettings() {
         guard settingsObserver == nil else { return }
         settingsObserver = NotificationCenter.default.addObserver(
-            forName: .instantSettingsChanged,
+            forName: .qcalcSettingsChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -530,7 +530,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
     private func pushSettingsToWeb() {
         let payload = settingsJavaScriptObject()
         web?.evaluateJavaScript(
-            "window.__INSTANT_SETTINGS = \(payload); if (window.__instantApplySettings) window.__instantApplySettings(\(payload));"
+            "window.__QCALC_SETTINGS = \(payload); if (window.__qcalcApplySettings) window.__qcalcApplySettings(\(payload));"
         )
     }
 
@@ -538,7 +538,8 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         let n = AppSettings.shared.significantFigures
         let d = AppSettings.shared.draftSeconds
         let units = AppSettings.shared.defaultUnitsJSON()
-        return "{ sigFigs: \(n), draftSeconds: \(d), defaultUnits: \(units) }"
+        let form = AppSettings.shared.answerForm
+        return "{ sigFigs: \(n), draftSeconds: \(d), defaultUnits: \(units), answerForm: \"\(form)\" }"
     }
 
     private func applyWebSettings(_ dict: [String: Any]) {
@@ -576,7 +577,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
               let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
               let json = String(data: data, encoding: .utf8)
         else { return }
-        web?.evaluateJavaScript("window.__instantNativeResult && window.__instantNativeResult(\(json));")
+        web?.evaluateJavaScript("window.__qcalcNativeResult && window.__qcalcNativeResult(\(json));")
     }
 
     private func dictionary(from body: Any) -> [String: Any] {
@@ -638,7 +639,7 @@ struct OverlayView: View {
                 .font(.system(size: 22, weight: .regular, design: .default))
                 .focused($focused)
                 .onSubmit { submit() }
-            Text(copied ? "copied to clipboard" : answer(for: text))
+            Text(copied ? "copied" : answer(for: text))
                 .font(.system(size: copied ? 13 : 22, weight: .regular, design: .default).monospacedDigit())
                 .foregroundStyle(copied ? Color.secondary : Color(red: 0.11, green: 0.48, blue: 0.30))
                 .lineLimit(1)

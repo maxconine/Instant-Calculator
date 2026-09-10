@@ -137,3 +137,208 @@ describe('nativeEvalPayload', () => {
     expect(nativeEvalPayload({ id: 2, expr: 'ans + 1', ans: 36, sigFigs: 12 }).ans).toBe(36)
   })
 })
+
+describe('mergeLiveAnswer', () => {
+  it.each(['2+2', 'sin(90)', 'sqrt(2)', '10^3', '5!', 'pi*2', '1/3', '3(4+5)', 'log(100)', '2^8'])(
+    'prefers JS for %s',
+    (expr) => {
+      expect(mergeLiveAnswer(expr, '1', 1, { expr, display: '9', n: 9 })).toEqual({ display: '1', n: 1 })
+    },
+  )
+  it.each(['what is 10% of 50', 'what is 20% of 80', "what's 15% of 40", '40 is what % of 90', '$5 for lunch + 10% tip'])(
+    'prefers native NLP for %s',
+    (expr) => {
+      expect(mergeLiveAnswer(expr, '1', 1, { expr, display: '9', n: 9 })).toEqual({ display: '9', n: 9 })
+    },
+  )
+  it.each(['50 W * 1 day', '1 kW * 2 hr', '20 m * 2 in', '10 N * 5 m', '1 Therm / 1 day'])('keeps JS unit product for %s', (expr) => {
+    expect(mergeLiveAnswer(expr, '4 J', 4, { expr, display: '9 kWh', n: 9 })).toEqual({ display: '4 J', n: 4 })
+  })
+  it.each(['$10 + 15%', '3:45pm + 1 hr', '20% off 50'])('uses native when JS empty for %s', (expr) => {
+    expect(mergeLiveAnswer(expr, '', undefined, { expr, display: 'ok', n: 1 })).toEqual({ display: 'ok', n: 1 })
+  })
+  it.each(['2+2', '1 m', 'sin(30)', '10 kg'])('ignores stale native for %s', (expr) => {
+    expect(mergeLiveAnswer(expr, '', undefined, { expr: 'other', display: '9', n: 9 })).toEqual({ display: '' })
+  })
+  it.each(['', ' ', '   ', '\t'])('clears blank %j', (expr) => {
+    expect(mergeLiveAnswer(expr, '4', 4, { expr: '2+2', display: '4', n: 4 })).toEqual({ display: '' })
+  })
+  it.each(['10 m to kg', '2 kg to m', '1 J to m'])('maps native unit error for %s', (expr) => {
+    expect(mergeLiveAnswer(expr, '', undefined, { expr, display: 'Error: incompatible units' })).toEqual({
+      display: 'improper unit conversion',
+    })
+  })
+  it.each(Array.from({ length: 60 }, (_, i) => `2+${i}`))('js wins arithmetic %s', (expr) => {
+    expect(mergeLiveAnswer(expr, String(iFrom(expr)), iFrom(expr), { expr, display: '9', n: 9 })).toEqual({
+      display: String(iFrom(expr)),
+      n: iFrom(expr),
+    })
+  })
+})
+
+function iFrom(expr: string): number {
+  return Number(expr.slice(2))
+}
+
+describe('nativeReplyToLive', () => {
+  it.each([1, 2, 3, 4, 5, 10, 99, 100, 1000])('accepts matching id %i', (id) => {
+    expect(nativeReplyToLive({ id, expr: 'x', display: '1', n: 1 }, id, 'x')).toEqual({ expr: 'x', display: '1', n: 1 })
+  })
+  it.each([1, 2, 3, 4, 5, 8, 9, 10])('drops stale id %i', (id) => {
+    expect(nativeReplyToLive({ id, expr: 'x', display: '1', n: 1 }, id + 1, 'x')).toBeNull()
+  })
+  it.each(['a', 'b', '2+2', 'sin(90)', '1 m'])('drops mismatched expr %s', (expr) => {
+    expect(nativeReplyToLive({ id: 1, expr, display: '1', n: 1 }, 1, expr + '!')).toBeNull()
+  })
+  it.each(['', ' ', '  '])('drops empty display %j', (display) => {
+    expect(nativeReplyToLive({ id: 1, expr: 'x', display, n: 1 }, 1, 'x')).toBeNull()
+  })
+  it.each(['10 m to kg', '2 kg to s', '1 J to m'])('maps incompatible units for %s', (expr) => {
+    expect(nativeReplyToLive({ id: 1, expr, display: 'Error: incompatible units', n: null }, 1, expr)).toEqual({
+      expr,
+      display: 'improper unit conversion',
+    })
+  })
+  it.each(['Error: ∞', 'Error: boom', 'error: overflow'])('drops other errors %s', (display) => {
+    expect(nativeReplyToLive({ id: 1, expr: 'x', display, n: null }, 1, 'x')).toBeNull()
+  })
+  it.each(Array.from({ length: 70 }, (_, i) => ({ id: i, expr: `e${i}`, display: `${i}` })))(
+    'roundtrip $expr',
+    ({ id, expr, display }) => {
+      expect(nativeReplyToLive({ id, expr, display, n: id }, id, expr)).toEqual({
+        expr,
+        display,
+        n: id,
+      })
+    },
+  )
+})
+
+describe('usableNativeDisplay', () => {
+  it.each([
+    ['Error: incompatible units', 'improper unit conversion'],
+    ['error: incompatible units', 'improper unit conversion'],
+    ['improper unit conversion', 'improper unit conversion'],
+    ['  improper unit conversion  ', 'improper unit conversion'],
+    ['error: divide by zero', ''],
+    ['Error: ∞', ''],
+    ['  Error: ∞/m  ', ''],
+    ['error: overflow', ''],
+    ['25.4 cm', '25.4 cm'],
+    ['4', '4'],
+    ['$11.50', '$11.50'],
+    ['7:55 pm', '7:55 pm'],
+    ['1.2 m', '1.2 m'],
+    ['3.14', '3.14'],
+    ['', ''],
+    ['   ', ''],
+  ])('%j → %j', (input, out) => {
+    expect(usableNativeDisplay(input)).toBe(out)
+  })
+  it.each(Array.from({ length: 80 }, (_, i) => `${i} m`))('keeps %s', (d) => {
+    expect(usableNativeDisplay(d)).toBe(d)
+  })
+  it.each(['12 ft', '3 kg', '9.8 m/s^2', '1 A', '5 V'])('keeps extra %s', (d) => {
+    expect(usableNativeDisplay(d)).toBe(d)
+  })
+})
+
+describe('looksLikeNaturalLanguage', () => {
+  it.each([
+    'what is 40% of 90',
+    'what is 10% of 20',
+    "what's 5% of 80",
+    'whats 12% of 50',
+    '$10 for lunch + 15% tip',
+    '$20 lunch + 20% tip',
+    '3:45pm + 4 hr',
+    '9:00am + 1 hr',
+    '10:30 pm - 15 min',
+    '20% off 40',
+    '15% of 200',
+    'tip 18%',
+    'lunch 12',
+    'today + 1 day',
+    'tomorrow - 2 hours',
+    'yesterday + 1',
+    'percent of 50',
+    '3 people * $20',
+    '2 nights * $100',
+    'from 3 to 5',
+    'until 6pm',
+    'between 1 and 2',
+    '5 per person',
+    '3 hours ago',
+    '€20 + tax',
+    '£5 + tip',
+    '¥1000',
+    '₹50 + 10%',
+  ])('detects %s', (expr) => {
+    expect(looksLikeNaturalLanguage(expr)).toBe(true)
+  })
+  it.each([
+    'sin(90)',
+    'cos(0)',
+    'tan(45)',
+    '2+2',
+    '3*4',
+    'sqrt(2)',
+    'log(100)',
+    '5!',
+    'pi*2',
+    '50 W * 1 day',
+    '1 Therm / 1 day',
+    '20 m * 2 in',
+    '1 kW * 2 hr',
+    '10 N * 5 m',
+    '1 kg * 2 m/s^2',
+    '100 J / 2 s',
+    '12 V * 2 A',
+    '1 m + 2 m',
+    '3 ft to m',
+    '2 in',
+    'abs(-3)',
+    'mean(1,2,3)',
+    'nCr(5,2)',
+    '2^8',
+    '10^-3',
+    '1.5e4',
+    '(1+2)*3',
+    'x = 4',
+    'ans * 2',
+    '',
+    '   ',
+  ])('scientific %s', (expr) => {
+    expect(looksLikeNaturalLanguage(expr)).toBe(false)
+  })
+  it.each(Array.from({ length: 20 }, (_, i) => `what is ${i}% of 100`))('detects %s', (expr) => {
+    expect(looksLikeNaturalLanguage(expr)).toBe(true)
+  })
+  it.each(Array.from({ length: 20 }, (_, i) => `sqrt(${i})`))('scientific extra %s', (expr) => {
+    expect(looksLikeNaturalLanguage(expr)).toBe(false)
+  })
+})
+
+describe('nativeEvalPayload', () => {
+  it.each(Array.from({ length: 40 }, (_, i) => i + 1))('omits undefined ans id=%i', (id) => {
+    const payload = nativeEvalPayload({ id, expr: 'x', ans: undefined, sigFigs: 12 })
+    expect(payload).toEqual({ type: 'eval', id, expr: 'x', sigFigs: 12 })
+    expect(Object.values(payload).some((v) => v === undefined)).toBe(false)
+  })
+  it.each([0, 1, 2, 3.5, 10, 36, 99, -4, 1e6, Math.PI])('includes ans %s', (ans) => {
+    expect(nativeEvalPayload({ id: 1, expr: 'ans', ans, sigFigs: 8 }).ans).toBe(ans)
+  })
+  it.each([2, 3, 4, 6, 8, 12, 16])('includes sigFigs %i', (sigFigs) => {
+    expect(nativeEvalPayload({ id: 1, expr: 'x', sigFigs }).sigFigs).toBe(sigFigs)
+  })
+  it.each(['a', 'b', '2+2', 'what is 40% of 90'])('keeps expr %s', (expr) => {
+    expect(nativeEvalPayload({ id: 7, expr }).expr).toBe(expr)
+  })
+  it.each(Array.from({ length: 40 }, (_, i) => ({ id: i, expr: `e${i}`, ans: i, sigFigs: 4 })))(
+    'payload $expr',
+    ({ id, expr, ans, sigFigs }) => {
+      const p = nativeEvalPayload({ id, expr, ans, sigFigs })
+      expect(p).toEqual({ type: 'eval', id, expr, ans, sigFigs })
+    },
+  )
+})

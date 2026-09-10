@@ -11,12 +11,13 @@ export function clampDraftSeconds(n: number): number {
 
 export type HideAction = 'commit' | 'keep' | 'clear'
 
-/** Valid live results commit like Enter; unfinished input is kept for `draftSeconds`. */
+/** Hide keeps the current input for `draftSeconds`. Enter is what commits to history. */
 export function hideAction(expr: string, display: string, draftSeconds: number): HideAction {
   if (!expr.trim()) return 'clear'
-  if (isImproperUnitConversion(display)) return draftSeconds > 0 ? 'keep' : 'clear'
+  if (draftSeconds > 0) return 'keep'
+  if (isImproperUnitConversion(display)) return 'clear'
   if (display) return 'commit'
-  return draftSeconds > 0 ? 'keep' : 'clear'
+  return 'clear'
 }
 
 export function shouldRestoreDraft(savedAt: number, now: number, draftSeconds: number): boolean {

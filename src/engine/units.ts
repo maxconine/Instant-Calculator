@@ -986,9 +986,15 @@ function tryUnitExpression(src: string, defaults?: DefaultUnits): Value | null {
   const { left, right } = splitConvert(src)
   const leftParser = new UnitParser(left)
   const leftQ = leftParser.parse()
-  if (!leftQ) return leftParser.incompatible ? unitError() : null
-  if (!right) return applyDefaultUnit(leftQ, defaults)
+  if (!right) {
+    if (!leftQ) return leftParser.incompatible ? unitError() : null
+    return applyDefaultUnit(leftQ, defaults)
+  }
   const rightQ = new UnitParser(right).parse()
+  if (!leftQ) {
+    if (leftParser.incompatible || (rightQ && leftParser.usedUnit)) return unitError()
+    return null
+  }
   if (!rightQ) return null
   return qtyToValue(leftQ, rightQ, right.replace(/\s+/g, ' '))
 }

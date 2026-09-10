@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>InstantSolver</string>
+	<string>QCalc</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.instantsolver.app</string>
+	<string>com.maxconine.qcalc</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleDisplayName</key>
-	<string>Instant Solver</string>
+	<string>Q Calc</string>
 	<key>CFBundleName</key>
-	<string>Instant Solver</string>
+	<string>Q Calc</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>

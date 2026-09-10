@@ -107,3 +107,130 @@ describe('Inferred parens evaluate', () => {
     expect(evaluateLine('(5 + 3) * 4').value?.n).toBe(32)
   })
 })
+
+const ATOMS = [
+  '1 + 2',
+  '3 * 4',
+  '10 - 6',
+  '8 / 2',
+  '9 + 0.5',
+  '7 * -2',
+  '100 / 4',
+  '2^3',
+  '0.25 + 0.75',
+  '11 - 3 + 1',
+  '5 * 5',
+  '12 / 3',
+  '4 + 4 * 2',
+  '6 - 1',
+  '9 * 1',
+  '15 / 5',
+  '2 + 2 + 2',
+  '3^2',
+  '8 - 8',
+  '14 + 7',
+]
+
+suite(
+  'Auto-Prepend Opening Parentheses (Leading Missing ()',
+  ATOMS.flatMap((expr, i) => [
+    { name: `pre ${i}a`, input: `${expr})`, filled: `(${expr})` },
+    { name: `pre ${i}b`, input: `${expr}) * 2`, filled: `(${expr}) * 2` },
+    { name: `pre ${i}c`, input: `${expr}) / 2`, filled: `(${expr}) / 2` },
+    { name: `pre ${i}d`, input: `${expr}) + 1`, filled: `(${expr}) + 1` },
+    { name: `pre ${i}e`, input: `${expr})2`, filled: `(${expr})2` },
+  ]),
+)
+
+suite(
+  'Auto-Append Closing Parentheses (Trailing Missing ))',
+  ATOMS.flatMap((expr, i) => [
+    { name: `app ${i}a`, input: `(${expr}`, filled: `(${expr})` },
+    { name: `app ${i}b`, input: `2 * (${expr}`, filled: `2 * (${expr})` },
+    { name: `app ${i}c`, input: `2 + (${expr}`, filled: `2 + (${expr})` },
+    { name: `app ${i}d`, input: `(${expr} + 1`, filled: `(${expr} + 1)` },
+    { name: `app ${i}e`, input: `10 / (${expr}`, filled: `10 / (${expr})` },
+  ]),
+)
+
+suite(
+  'Bidirectional Auto-Fill (Simultaneous Prepend & Append)',
+  ATOMS.flatMap((expr, i) => {
+    const other = ATOMS[(i + 3) % ATOMS.length]!
+    return [
+      { name: `bi ${i}a`, input: `${expr}) * (${other}`, filled: `(${expr}) * (${other})` },
+      { name: `bi ${i}b`, input: `${expr}) + (${other}`, filled: `(${expr}) + (${other})` },
+      { name: `bi ${i}c`, input: `${expr}) / (${other}`, filled: `(${expr}) / (${other})` },
+      { name: `bi ${i}d`, input: `${expr}) - (${other}`, filled: `(${expr}) - (${other})` },
+      { name: `bi ${i}e`, input: `${expr}) + 1 * (${other}`, filled: `(${expr}) + 1 * (${other})` },
+    ]
+  }),
+)
+
+suite(
+  'Deep Nesting & Multiple Missing Parentheses (Depth |Δ| > 1)',
+  ATOMS.flatMap((expr, i) => [
+    { name: `deep ${i}a`, input: `${expr}))`, filled: `((${expr}))` },
+    { name: `deep ${i}b`, input: `((${expr}`, filled: `((${expr}))` },
+    { name: `deep ${i}c`, input: `${expr})))`, filled: `(((${expr})))` },
+    { name: `deep ${i}d`, input: `(((${expr}`, filled: `(((${expr})))` },
+    { name: `deep ${i}e`, input: `((${expr})))`, filled: `(((${expr})))` },
+  ]),
+)
+
+suite(
+  'Functions & Implicit Multiplication',
+  ATOMS.flatMap((expr, i) => [
+    { name: `fn ${i}a`, input: `sin(${expr}`, filled: `sin(${expr})` },
+    { name: `fn ${i}b`, input: `cos(${expr}`, filled: `cos(${expr})` },
+    { name: `fn ${i}c`, input: `sqrt(${expr}`, filled: `sqrt(${expr})` },
+    { name: `fn ${i}d`, input: `log(${expr}`, filled: `log(${expr})` },
+    { name: `fn ${i}e`, input: `ln(${expr}`, filled: `ln(${expr})` },
+    { name: `fn ${i}f`, input: `2(${expr}`, filled: `2(${expr})` },
+  ]),
+)
+
+suite(
+  'Boundary Conditions, Special Symbols & Control Cases',
+  [
+    ...ATOMS.map((expr, i) => ({ name: `ctrl balanced ${i}`, input: `(${expr})`, filled: `(${expr})` })),
+    ...ATOMS.map((expr, i) => ({ name: `ctrl bare ${i}`, input: expr, filled: expr })),
+    ...ATOMS.map((expr, i) => ({ name: `ctrl empty close ${i}`, input: `) + ${expr}`, filled: `() + ${expr}` })),
+    ...ATOMS.map((expr, i) => ({ name: `ctrl empty open ${i}`, input: `${expr} + (`, filled: `${expr} + ()` })),
+    { name: 'empty pair', input: '()', filled: '()' },
+    { name: 'double empty', input: '()()', filled: '()()' },
+    { name: 'nested empty', input: '(())', filled: '(())' },
+    { name: 'triple empty open', input: '(((', filled: '((()))' },
+    { name: 'triple empty close', input: ')))', filled: '((()))' },
+    { name: 'mixed empty', input: ')()', filled: '()()' },
+    { name: 'plus empties', input: ') + )', filled: '(() + )' },
+    { name: 'times empties', input: ') * (', filled: '() * ()' },
+    { name: 'minus empties', input: ') - (', filled: '() - ()' },
+    { name: 'div empties', input: ') / (', filled: '() / ()' },
+    { name: 'nested trailing', input: '(()', filled: '(())' },
+    { name: 'nested leading', input: '())', filled: '(())' },
+    { name: 'four open', input: '((((', filled: '(((())))' },
+    { name: 'four close', input: '))))', filled: '(((())))' },
+    { name: 'two close one open', input: '))(', filled: '(())()' },
+    { name: 'open close open', input: '()(', filled: '()()' },
+  ],
+)
+
+describe('Inferred parens evaluate', () => {
+  it.each(
+    ATOMS.flatMap((expr, i) => [
+      { name: `eval pre ${i}`, input: `${expr})` },
+      { name: `eval app ${i}`, input: `(${expr}` },
+      { name: `eval both ${i}`, input: `${expr}) * (1` },
+      { name: `eval fn ${i}`, input: `abs(${expr}` },
+      { name: `eval add ${i}`, input: `${expr}) + 1` },
+      { name: `eval mul ${i}`, input: `2*(${expr}` },
+    ]),
+  )('$name', ({ input }) => {
+    expect(() => evaluateLine(input)).not.toThrow()
+    const filled = fillParens(input)
+    const a = evaluateLine(input).value?.n
+    const b = evaluateLine(filled).value?.n
+    if (a != null && b != null) expect(a).toBeCloseTo(b, 8)
+  })
+})

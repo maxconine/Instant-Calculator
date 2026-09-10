@@ -106,10 +106,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 
 .modes {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(3, auto);
-  gap: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .modes button {
   border: 0;
@@ -180,26 +179,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   color: var(--muted);
 }
 
-.live-group {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 88px;
-  min-height: 36px;
-  overflow: hidden;
-}
-.live-group.empty {
-  color: var(--muted);
-}
-.live-approx,
-.tape-approx {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 400;
-  flex-shrink: 0;
-  user-select: none;
-}
 .live {
   border: 0;
   background: transparent;
@@ -210,18 +189,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.022em;
   text-align: right;
-  min-width: 0;
+  min-width: 88px;
   min-height: 36px;
   padding: 4px 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: 8px;
-}
-.live-exact {
-  font-size: 18px;
-  flex-shrink: 0;
-  max-width: 55%;
 }
 .live:hover:not(:disabled) {
   color: var(--answer-hover);
@@ -281,19 +255,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   color: var(--muted);
 }
 .tape-a {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 5px;
-  min-width: 0;
-  overflow: hidden;
-}
-.tape-exact,
-.tape-decimal {
   border: 0;
   background: transparent;
   color: var(--answer);
   font-family: var(--font);
+  font-size: 20px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -304,27 +270,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   padding: 4px 4px;
   border-radius: 6px;
 }
-.tape-exact {
-  font-size: 15px;
-  flex-shrink: 0;
-  max-width: 55%;
-}
-.tape-decimal {
-  font-size: 20px;
-  min-width: 0;
-}
-.tape-exact:hover,
-.tape-decimal:hover {
+.tape-a:hover {
   color: var(--answer-hover);
   background: color-mix(in srgb, var(--answer) 12%, transparent);
-}
-.tape-exact.insert-target,
-.tape-decimal.insert-target {
-  color: var(--answer);
-}
-.tape-exact:not(.insert-target),
-.tape-decimal:not(.insert-target) {
-  color: color-mix(in srgb, var(--answer) 55%, var(--muted));
 }
 
 .quick-app {

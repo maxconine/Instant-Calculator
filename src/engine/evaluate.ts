@@ -1,14 +1,10 @@
 import type { EvaluateOptions, LineResult, SheetInputLine, Value } from './types'
 import { DEFAULT_SIG_FIGS, formatValue } from './format'
 import { tryPlainMath } from './plainMath'
-import { formatAsFraction } from './scientific'
+import { formatAsFraction, SCIENTIFIC_NAMES } from './scientific'
 import { exactForm } from './simplify'
 
-const RESERVED = new Set(
-  (
-    'sqrt|cbrt|nthroot|nthRoot|sin|cos|tan|csc|sec|cot|asin|acos|atan|arcsin|arccos|arctan|arccsc|arcsec|arccot|sinh|cosh|tanh|csch|sech|coth|asinh|acosh|atanh|arsinh|arcosh|artanh|arcsinh|arccosh|arctanh|arccsch|arcsech|arccoth|acsch|asech|acoth|ln|log|log2|log10|exp|abs|sign|floor|ceil|round|clamp|min|max|mean|median|mad|std|stdev|stdevp|var|varp|sum|total|length|count|quartile|quantile|corr|gcd|lcm|mod|hypot|factorial|nCr|nPr|combinations|permutations|randint|rand|random|re|im|real|imag|conj|arg|range|desmosRange|pi|tau|inf|infinity|ans|e'
-  ).split('|'),
-)
+const RESERVED = new Set(`${SCIENTIFIC_NAMES}|e`.split('|'))
 
 function show(value: Value, fractionMode: boolean, sigFigs: number): string {
   if (value.kind === 'text' && value.text) return value.text

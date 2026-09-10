@@ -3,24 +3,27 @@ import Carbon
 import Combine
 
 extension Notification.Name {
-    static let instantSettingsChanged = Notification.Name("InstantSolver.settingsChanged")
+    static let qcalcSettingsChanged = Notification.Name("QCalc.settingsChanged")
 }
 
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
-    static let sigFigsKey = "instant.sigFigs"
-    static let draftSecondsKey = "instant.draftSeconds"
-    static let defaultUnitsKey = "instant.defaultUnits"
+    static let sigFigsKey = "qcalc.sigFigs"
+    static let draftSecondsKey = "qcalc.draftSeconds"
+    static let defaultUnitsKey = "qcalc.defaultUnits"
+    static let answerFormKey = "qcalc.answerForm"
     static let defaultSigFigs = 12
     static let minSigFigs = 2
     static let maxSigFigs = 16
     static let defaultDraftSeconds = 60
     static let minDraftSeconds = 0
     static let maxDraftSeconds = 3600
+    static let defaultAnswerForm = "exact"
 
     @Published private(set) var significantFigures: Int
     @Published private(set) var draftSeconds: Int
     @Published private(set) var defaultUnits: [String: String]
+    @Published private(set) var answerForm: String
 
     private init() {
         let storedFigs = UserDefaults.standard.integer(forKey: Self.sigFigsKey)
@@ -31,6 +34,12 @@ final class AppSettings: ObservableObject {
             draftSeconds = Self.clampDraftSeconds(UserDefaults.standard.integer(forKey: Self.draftSecondsKey))
         }
         defaultUnits = Self.loadDefaultUnits()
+        answerForm = Self.loadAnswerForm()
+    }
+
+    private static func loadAnswerForm() -> String {
+        let stored = UserDefaults.standard.string(forKey: answerFormKey) ?? defaultAnswerForm
+        return stored == "approx" ? "approx" : defaultAnswerForm
     }
 
     private static func loadDefaultUnits() -> [String: String] {
@@ -57,7 +66,7 @@ final class AppSettings: ObservableObject {
         significantFigures = value
         UserDefaults.standard.set(value, forKey: Self.sigFigsKey)
         if notifyWeb {
-            NotificationCenter.default.post(name: .instantSettingsChanged, object: nil)
+            NotificationCenter.default.post(name: .qcalcSettingsChanged, object: nil)
         }
     }
 
@@ -67,7 +76,17 @@ final class AppSettings: ObservableObject {
         draftSeconds = value
         UserDefaults.standard.set(value, forKey: Self.draftSecondsKey)
         if notifyWeb {
-            NotificationCenter.default.post(name: .instantSettingsChanged, object: nil)
+            NotificationCenter.default.post(name: .qcalcSettingsChanged, object: nil)
+        }
+    }
+
+    func setAnswerForm(_ form: String, notifyWeb: Bool) {
+        let value = form == "approx" ? "approx" : Self.defaultAnswerForm
+        guard value != answerForm else { return }
+        answerForm = value
+        UserDefaults.standard.set(value, forKey: Self.answerFormKey)
+        if notifyWeb {
+            NotificationCenter.default.post(name: .qcalcSettingsChanged, object: nil)
         }
     }
 
@@ -91,7 +110,7 @@ final class AppSettings: ObservableObject {
         defaultUnits = next
         UserDefaults.standard.set(next, forKey: Self.defaultUnitsKey)
         if notifyWeb {
-            NotificationCenter.default.post(name: .instantSettingsChanged, object: nil)
+            NotificationCenter.default.post(name: .qcalcSettingsChanged, object: nil)
         }
     }
 
@@ -102,7 +121,7 @@ final class AppSettings: ObservableObject {
 }
 
 @main
-enum InstantSolver {
+enum QCalc {
     static let delegate = AppDelegate()
 
     static func main() {
@@ -144,12 +163,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildStatusMenu(menu)
     }
 
+    private func statusBarImage() -> NSImage {
+        if let url = Bundle.main.url(forResource: "StatusIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            image.size = NSSize(width: 18, height: 18)
+            image.isTemplate = false
+            return image
+        }
+        let fallback = NSImage(systemSymbolName: "sum", accessibilityDescription: "Q Calc")
+        fallback?.isTemplate = true
+        return fallback ?? NSImage()
+    }
+
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "sum", accessibilityDescription: "Instant Solver")
-            button.image?.isTemplate = true
-            button.toolTip = "Instant Solver"
+            button.image = statusBarImage()
+            button.imageScaling = .scaleProportionallyDown
+            button.toolTip = "Q Calc"
         }
         let menu = NSMenu()
         menu.delegate = self
@@ -158,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func buildStatusMenu(_ menu: NSMenu) {
-        let quick = NSMenuItem(title: "Show Instant Solver", action: #selector(showQuickCalc), keyEquivalent: "")
+        let quick = NSMenuItem(title: "Show Q Calc", action: #selector(showQuickCalc), keyEquivalent: "")
         quick.target = self
         menu.addItem(quick)
         menu.addItem(.separator())
@@ -166,6 +197,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let figs = NSMenuItem(title: "Significant figures", action: nil, keyEquivalent: "")
         figs.submenu = sigFigsMenu()
         menu.addItem(figs)
+
+        let answers = NSMenuItem(title: "Answers", action: nil, keyEquivalent: "")
+        answers.submenu = answerFormMenu()
+        menu.addItem(answers)
 
         let draft = NSMenuItem(title: "Keep unfinished", action: nil, keyEquivalent: "")
         draft.submenu = draftMenu()
@@ -176,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(units)
 
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Instant Solver", action: #selector(quitApp), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Q Calc", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
     }
@@ -189,6 +224,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.tag = n
             item.state = n == current ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func answerFormMenu() -> NSMenu {
+        let menu = NSMenu()
+        let current = AppSettings.shared.answerForm
+        let options: [(String, String)] = [
+            ("Exact", "exact"),
+            ("Approximate", "approx"),
+        ]
+        for (title, form) in options {
+            let item = NSMenuItem(title: title, action: #selector(setAnswerForm(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = form
+            item.state = form == current ? .on : .off
             menu.addItem(item)
         }
         return menu
@@ -226,6 +278,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppSettings.shared.setDraftSeconds(sender.tag, notifyWeb: true)
     }
 
+    @objc private func setAnswerForm(_ sender: NSMenuItem) {
+        let form = sender.representedObject as? String ?? AppSettings.defaultAnswerForm
+        AppSettings.shared.setAnswerForm(form, notifyWeb: true)
+    }
+
     @objc private func showUnitSettings() {
         if unitSettings == nil {
             unitSettings = UnitSettingsWindowController()
@@ -241,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         HotKeyBox.shared.onPress = { [weak self] in
             DispatchQueue.main.async { self?.toggleOverlay() }
         }
-        let hotKeyID = EventHotKeyID(signature: OSType(0x49534C56), id: 1)
+        let hotKeyID = EventHotKeyID(signature: OSType(0x51434C43), id: 1) // QCLC
         let modifiers = UInt32(controlKey | optionKey)
         let status = RegisterEventHotKey(
             UInt32(kVK_Space),
@@ -252,13 +309,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             &hotKeyRef
         )
         if status != noErr {
-            NSLog("Instant Solver: failed to register Control+Option+Space (%d)", status)
+            NSLog("Q Calc: failed to register Control+Option+Space (%d)", status)
         }
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(
             GetEventDispatcherTarget(),
-            instantSolverHotKeyHandler,
+            qcalcHotKeyHandler,
             1,
             &eventType,
             nil,
@@ -272,7 +329,7 @@ final class HotKeyBox {
     var onPress: (() -> Void)?
 }
 
-func instantSolverHotKeyHandler(
+func qcalcHotKeyHandler(
     _ nextHandler: EventHandlerCallRef?,
     _ event: EventRef?,
     _ userData: UnsafeMutableRawPointer?
@@ -287,7 +344,7 @@ func instantSolverHotKeyHandler(
         nil,
         &id
     )
-    if id.signature == OSType(0x49534C56) {
+    if id.signature == OSType(0x51434C43) {
         HotKeyBox.shared.onPress?()
     }
     return noErr

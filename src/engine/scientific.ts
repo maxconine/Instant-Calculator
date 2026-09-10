@@ -4,8 +4,10 @@ import type { Value } from './types'
 
 export type AngleMode = 'deg' | 'rad'
 
-const FN =
-  'sqrt|cbrt|nthroot|nthRoot|sin|cos|tan|csc|sec|cot|asin|acos|atan|arcsin|arccos|arctan|arccsc|arcsec|arccot|sinh|cosh|tanh|csch|sech|coth|asinh|acosh|atanh|arsinh|arcosh|artanh|arcsinh|arccosh|arctanh|arccsch|arcsech|arccoth|acsch|asech|acoth|ln|log|log2|log10|exp|abs|sign|floor|ceil|round|clamp|min|max|mean|median|mad|std|stdev|stdevp|var|varp|sum|total|length|count|quartile|quantile|corr|gcd|lcm|mod|hypot|factorial|nCr|nPr|combinations|permutations|randint|rand|random|re|im|real|imag|conj|arg|range|desmosRange|pi|tau|inf|infinity|ans'
+export const SCIENTIFIC_NAMES =
+  'sqrt|cbrt|nthroot|nthRoot|sin|cos|tan|csc|sec|cot|asin|acos|atan|arcsin|arccos|arctan|arccsc|arcsec|arccot|sinh|cosh|tanh|csch|sech|coth|asinh|acosh|atanh|arsinh|arcosh|artanh|arcsinh|arccosh|arctanh|arccsch|arcsech|arccoth|acsch|asech|acoth|ln|log|log2|log10|exp|abs|sign|floor|ceil|round|clamp|min|max|mean|median|mad|std|stdev|stdevp|var|varp|sum|total|length|count|quartile|quantile|corr|gcd|lcm|mod|hypot|factorial|nCr|nPr|combinations|permutations|randint|rand|random|re|im|real|imag|conj|arg|range|inclusiveRange|pi|tau|inf|infinity|ans'
+
+const FN = SCIENTIFIC_NAMES
 
 const FN_RE = new RegExp(`\\b(${FN})\\b`, 'gi')
 
@@ -159,7 +161,7 @@ export function wrapBareFunctions(expr: string): string {
   return out
 }
 
-/** MathLive types "pi" as the letters p and i (often p·i or p i), not the constant. */
+/** Treat typed "p i" / "p·i" as the constant π. */
 export function stitchConstants(s: string): string {
   let out = s
   out = out.replace(/\\imaginaryI\b/gi, 'i')
@@ -192,7 +194,7 @@ export function preprocessAscii(expr: string): string {
   s = s.replace(/\bnPr\s*\(/g, 'permutations(')
   s = s.replace(/\bn\s*\(/g, 'length(')
   s = s.replace(/\bcount\s*\(/g, 'length(')
-  s = s.replace(/\[([^\][]*?)\s*\.\.\.\s*([^\][]*?)\]/g, 'desmosRange($1,$2)')
+  s = s.replace(/\[([^\][]*?)\s*\.\.\.\s*([^\][]*?)\]/g, 'inclusiveRange($1,$2)')
   s = s.replace(/\breal\b/g, 're').replace(/\bimag\b/g, 'im')
   s = s.replace(/\blog_(\d+(?:\.\d+)?)\s*\(([^)]+)\)/g, 'log($2, $1)')
   s = s.replace(/\blog\(([^,)]+)\)/g, 'log10($1)')
@@ -406,7 +408,7 @@ export function evalScientific(
     permutations: math.permutations,
     nCr: math.combinations,
     nPr: math.permutations,
-    desmosRange: (a: number, b: number) => {
+    inclusiveRange: (a: number, b: number) => {
       const out: number[] = []
       const step = a <= b ? 1 : -1
       for (let i = a; step > 0 ? i <= b : i >= b; i += step) out.push(i)

@@ -1223,3 +1223,826 @@ cross('Cross-unit: multi-operator physics expressions', [
   { name: '99. 1 kg * (1 speedOfLight)^2', expr: '1 kg * (1 speedOfLight)^2', si: C * C, siUnit: 'J', alt: C * C, altUnit: 'kg * m^2 / s^2' },
   { name: '100. 1 AMU * (1 speedOfLight)^2', expr: '1 AMU * (1 speedOfLight)^2', si: AMU * C * C, siUnit: 'J', alt: (AMU * C * C) / E / 1e6, altUnit: 'MeV' },
 ])
+
+function grid(title: string, units: Array<[string, number]>, amounts: number[] = [1, 2, 3, 5, 8, 10]) {
+  const cases: Case[] = []
+  for (const amt of amounts) {
+    for (const [a, sa] of units) {
+      for (const [b, sb] of units) {
+        cases.push({
+          name: `${amt} ${a} to ${b}`,
+          input: `${amt} ${a} to ${b}`,
+          expected: (amt * sa) / sb,
+        })
+      }
+    }
+  }
+  compat(title, cases)
+}
+
+function scaledCross(title: string, make: (n: number) => Cross, from = 1, to = 96) {
+  const rows: Cross[] = []
+  for (let n = from; n <= to; n++) rows.push(make(n))
+  cross(title, rows)
+}
+
+grid(
+  'Length & Distance',
+  [
+    ['in', IN],
+    ['ft', FT],
+    ['yd', YD],
+    ['m', 1],
+    ['km', 1000],
+    ['mi', MI],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Length conversions & operations',
+  [
+    ['Inch', IN],
+    ['Foot', FT],
+    ['Yard', YD],
+    ['meter', 1],
+    ['Mile', MI],
+    ['Furlong', FURLONG],
+    ['NauticalMile', NMI],
+  ],
+  [1, 2, 4],
+)
+grid(
+  'Mass & Weight',
+  [
+    ['oz', 0.028349523125],
+    ['lb', LB],
+    ['g', 0.001],
+    ['kg', 1],
+    ['tonne', 1000],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Mass conversions & operations',
+  [
+    ['OunceMass', 0.028349523125],
+    ['PoundMass', LB],
+    ['gram', 0.001],
+    ['kilogram', 1],
+    ['metricTon', 1000],
+    ['Grain', 64.79891e-6],
+  ],
+  [1, 2, 5],
+)
+
+const tempCases: Case[] = []
+for (const c of [-40, -20, -10, 0, 5, 10, 15, 20, 25, 30, 37, 40, 50, 80, 100, 150, 200, -273.15, 1000, -50, 12.5, 36.5]) {
+  tempCases.push(
+    { name: `${c} C to F`, input: `${c} celsius to fahrenheit`, expected: (c * 9) / 5 + 32 },
+    { name: `${c} C to K`, input: `${c} celsius to kelvin`, expected: c + 273.15 },
+    { name: `${c} C to R`, input: `${c} celsius to rankine`, expected: (c + 273.15) * (9 / 5) },
+  )
+}
+for (const f of [-40, 0, 32, 50, 68, 72, 98.6, 100, 212, 451]) {
+  tempCases.push(
+    { name: `${f} F to C`, input: `${f} fahrenheit to celsius`, expected: ((f - 32) * 5) / 9 },
+    { name: `${f} F to K`, input: `${f} fahrenheit to kelvin`, expected: ((f - 32) * 5) / 9 + 273.15 },
+  )
+}
+for (const k of [0, 100, 255.37, 273.15, 293.15, 310.15, 373.15, 500]) {
+  tempCases.push(
+    { name: `${k} K to C`, input: `${k} kelvin to celsius`, expected: k - 273.15 },
+    { name: `${k} K to F`, input: `${k} kelvin to fahrenheit`, expected: ((k - 273.15) * 9) / 5 + 32 },
+  )
+}
+compat('Temperature', tempCases)
+
+grid(
+  'Volume & Capacity',
+  [
+    ['ml', 0.001],
+    ['L', 1],
+    ['gal', US_GAL],
+    ['qt', 0.946352946],
+    ['cup', 0.2365882365],
+    ['floz', US_FLOZ],
+  ],
+  [1, 2, 4, 8],
+)
+grid(
+  'Area',
+  [
+    ['m^2', 1],
+    ['ft^2', FT * FT],
+    ['acre', ACRE],
+    ['hectare', 10000],
+    ['in^2', IN * IN],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Area & volume',
+  [
+    ['liter', 0.001],
+    ['Gallon', US_GAL * 0.001],
+    ['cc', 1e-6],
+    ['meter^3', 1],
+    ['Foot^3', FT ** 3],
+  ],
+  [1, 2, 4, 8],
+)
+grid(
+  'Speed & Velocity',
+  [
+    ['mph', MI / 3600],
+    ['km/h', 1000 / 3600],
+    ['m/s', 1],
+    ['knot', NMI / 3600],
+    ['ft/s', FT],
+  ],
+  [1, 2, 5, 10, 20, 60],
+)
+grid(
+  'Velocity & acceleration',
+  [
+    ['MPH', MI / 3600],
+    ['kph', 1000 / 3600],
+    ['m/s', 1],
+    ['Knot', NMI / 3600],
+  ],
+  [1, 5, 10, 20, 50],
+)
+grid(
+  'Time',
+  [
+    ['s', 1],
+    ['min', 60],
+    ['hr', 3600],
+    ['day', 86400],
+    ['week', 604800],
+  ],
+  [1, 2, 3, 6, 12],
+)
+grid(
+  'Time conversions & operations',
+  [
+    ['second', 1],
+    ['minute', 60],
+    ['hour', 3600],
+    ['day', 86400],
+    ['year', YEAR],
+  ],
+  [1, 2, 4, 10],
+)
+grid(
+  'Digital Data Storage',
+  [
+    ['kilobytes', 1024],
+    ['megabytes', 1024 ** 2],
+    ['gigabytes', 1024 ** 3],
+    ['terabytes', 1024 ** 4],
+  ],
+  [1, 2, 4, 8, 16, 32, 64],
+)
+grid(
+  'Energy & Power',
+  [
+    ['J', 1],
+    ['kJ', 1000],
+    ['cal', 4.184],
+    ['BTU', BTU],
+    ['kWh', 3.6e6],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Energy & Power',
+  [
+    ['W', 1],
+    ['kW', 1000],
+    ['hp', HP],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Work, energy & power',
+  [
+    ['Joule', 1],
+    ['calorie', 4.184],
+    ['BTU', BTU],
+    ['eV', E],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Work, energy & power',
+  [
+    ['Watt', 1],
+    ['HorsePower', HP],
+    ['kilowatt', 1000],
+  ],
+  [1, 2, 5, 10, 20],
+)
+grid(
+  'Force & pressure',
+  [
+    ['N', 1],
+    ['lbf', LBF],
+    ['dyne', 1e-5],
+    ['kgf', G0],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Force & pressure',
+  [
+    ['Pa', 1],
+    ['bar', 1e5],
+    ['atm', ATM],
+    ['PSI', PSI],
+    ['Torr', TORR],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['amp', 1],
+    ['milliamp', 0.001],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['Volt', 1],
+    ['kilovolt', 1000],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['Ohm', 1],
+    ['kiloohm', 1000],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['Farad', 1],
+    ['microfarad', 1e-6],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['Henry', 1],
+    ['millihenry', 0.001],
+  ],
+  [1, 2, 5, 10, 20, 50, 100],
+)
+grid(
+  'Charge & electrical units',
+  [
+    ['Coulomb', 1],
+    ['electron', E],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Angle, frequency & angular velocity',
+  [
+    ['deg', Math.PI / 180],
+    ['rad', 1],
+    ['rev', 2 * Math.PI],
+  ],
+  [1, 2, 6, 10, 60, 90, 180],
+)
+grid(
+  'Angle, frequency & angular velocity',
+  [
+    ['Hz', 1],
+    ['RPM', 1 / 60],
+    ['kHz', 1000],
+  ],
+  [1, 2, 6, 10, 60],
+)
+grid(
+  'SI prefixes',
+  [
+    ['millimeter', 0.001],
+    ['centimeter', 0.01],
+    ['kilometer', 1000],
+    ['megameter', 1e6],
+    ['nanometer', 1e-9],
+    ['micrometer', 1e-6],
+  ],
+  [1, 2, 5, 10],
+)
+
+const autoCases: Case[] = []
+for (const n of [1, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 30, 36, 48, 50, 60, 72, 90, 100]) {
+  autoCases.push(
+    { name: `${n} in default mm`, input: `${n} in`, expected: n * 25.4 },
+    { name: `${n} ft default m`, input: `${n} ft`, expected: n * FT },
+    { name: `${n} lb default kg`, input: `${n} lb`, expected: n * LB },
+    { name: `${n} m default ft`, input: `${n} m`, expected: n / FT },
+    { name: `${n} kg default lb`, input: `${n} kg`, expected: n / LB },
+    { name: `${n} mph default km/h`, input: `${n} mph`, expected: n * 1.609344 },
+  )
+}
+compat('Automatic SI ↔ US conversion', autoCases)
+
+const catalogExtra: Case[] = []
+for (const n of [2, 5, 10]) {
+  catalogExtra.push(
+    { name: `${n} Fermi to m`, input: `${n} Fermi to m`, expected: n * 1e-15 },
+    { name: `${n} angstrom to m`, input: `${n} angstrom to m`, expected: n * 1e-10 },
+    { name: `${n} Yds to m`, input: `${n} Yds to m`, expected: n * YD },
+    { name: `${n} Fathom to ft`, input: `${n} Fathom to ft`, expected: n * 6 },
+    { name: `${n} Rod to ft`, input: `${n} Rod to ft`, expected: n * 16.5 },
+    { name: `${n} Chain to ft`, input: `${n} Chain to ft`, expected: n * 66 },
+    { name: `${n} Furlong to ft`, input: `${n} Furlong to ft`, expected: n * 660 },
+    { name: `${n} League to mi`, input: `${n} League to mi`, expected: n * 3 },
+    { name: `${n} NauticalMile to m`, input: `${n} NauticalMile to m`, expected: n * 1852 },
+    { name: `${n} decade to years`, input: `${n} decade to years`, expected: n * 10 },
+    { name: `${n} century to years`, input: `${n} century to years`, expected: n * 100 },
+    { name: `${n} millenium to years`, input: `${n} millenium to years`, expected: n * 1000 },
+    { name: `${n} revolution to deg`, input: `${n} revolution to deg`, expected: n * 360 },
+    { name: `${n} RPM to Hz`, input: `${n} RPM to Hz`, expected: n / 60 },
+    { name: `${n} Hertz to RPM`, input: `${n} Hertz to RPM`, expected: n * 60 },
+    { name: `${n} lightSpeed to m/s`, input: `${n} lightSpeed to m/s`, expected: n * C },
+    { name: `${n} gravity to m/s^2`, input: `${n} gravity to m/s^2`, expected: n * G0 },
+    { name: `${n} dyne to N`, input: `${n} dyne to N`, expected: n * 1e-5 },
+    { name: `${n} kgForce to N`, input: `${n} kgForce to N`, expected: n * G0 },
+    { name: `${n} PoundForce to N`, input: `${n} PoundForce to N`, expected: n * G0 * LB },
+    { name: `${n} kip to lbf`, input: `${n} kip to lbf`, expected: n * 1000 },
+    { name: `${n} eV to J`, input: `${n} eV to J`, expected: n * E },
+    { name: `${n} erg to J`, input: `${n} erg to J`, expected: n * 1e-7 },
+    { name: `${n} Therm to BTU`, input: `${n} Therm to BTU`, expected: n * 1e5 },
+    { name: `${n} HorsePower to W`, input: `${n} HorsePower to W`, expected: n * HP },
+    { name: `${n} barn to m^2`, input: `${n} barn to m^2`, expected: n * 1e-28 },
+    { name: `${n} Drop to mL`, input: `${n} Drop to mL`, expected: n * 0.05 },
+    { name: `${n} Tbs to tsp`, input: `${n} Tbs to tsp`, expected: n * 3 },
+    { name: `${n} Barrel to gal`, input: `${n} Barrel to gal`, expected: n * 42 },
+    { name: `${n} Cord to ft3`, input: `${n} Cord to ft3`, expected: n * 128 },
+    { name: `${n} electron to Coulomb`, input: `${n} electron to Coulomb`, expected: n * E },
+    { name: `${n} Lbm to kg`, input: `${n} Lbm to kg`, expected: n * LB },
+    { name: `${n} Slug to kg`, input: `${n} Slug to kg`, expected: n * SLUG },
+    { name: `${n} ShortTon to lbs`, input: `${n} ShortTon to lbs`, expected: n * 2000 },
+    { name: `${n} LongTon to lbs`, input: `${n} LongTon to lbs`, expected: n * 2240 },
+    { name: `${n} AMU to kg`, input: `${n} AMU to kg`, expected: n * AMU },
+    { name: `${n} parsec to au`, input: `${n} parsec to au`, expected: n * (648000 / Math.PI) },
+    { name: `${n} lightYear to m`, input: `${n} lightYear to m`, expected: n * C * YEAR },
+    { name: `${n} astronomicalUnit to m`, input: `${n} astronomicalUnit to m`, expected: n * AU },
+    { name: `${n} Ozm to g`, input: `${n} Ozm to g`, expected: n * 28.349523125 },
+    { name: `${n} Snail to slugs`, input: `${n} Snail to slugs`, expected: n * 12 },
+    { name: `${n} Peck to bushels`, input: `${n} Peck to bushels`, expected: n / 4 },
+    { name: `${n} amp to milliamp`, input: `${n} amp to milliamp`, expected: n * 1000 },
+    { name: `${n} Volt to kilovolt`, input: `${n} Volt to kilovolt`, expected: n / 1000 },
+    { name: `${n} Farad to millifarad`, input: `${n} Farad to millifarad`, expected: n * 1000 },
+    { name: `${n} Henry to millihenry`, input: `${n} Henry to millihenry`, expected: n * 1000 },
+    { name: `${n} Dimensionless to units`, input: `${n} Dimensionless to units`, expected: n },
+    { name: `${n} arcSecond to deg`, input: `${n} arcSecond to deg`, expected: n / 3600 },
+    { name: `${n} arcMinute to deg`, input: `${n} arcMinute to deg`, expected: n / 60 },
+    { name: `${n} km/hr to m/s`, input: `${n} km/hr to m/s`, expected: n / 3.6 },
+  )
+}
+compat('Requested catalog aliases', catalogExtra)
+
+grid(
+  'Kinematics & mechanics',
+  [
+    ['N', 1],
+    ['lbf', LBF],
+    ['dyne', 1e-5],
+    ['kgf', G0],
+  ],
+  [1, 2, 5, 10, 20],
+)
+grid(
+  'Kinematics & mechanics',
+  [
+    ['J', 1],
+    ['kJ', 1000],
+    ['erg', 1e-7],
+  ],
+  [1, 2, 5, 10, 20],
+)
+grid(
+  'Pressure, stress & fluid dynamics',
+  [
+    ['Pa', 1],
+    ['bar', 1e5],
+    ['PSI', PSI],
+    ['atm', ATM],
+    ['Torr', TORR],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Electromagnetism',
+  [
+    ['amp', 1],
+    ['milliamp', 0.001],
+  ],
+  [1, 2, 5, 10, 20, 50],
+)
+grid(
+  'Electromagnetism',
+  [
+    ['Volt', 1],
+    ['kilovolt', 1000],
+  ],
+  [1, 2, 5, 10, 20, 50],
+)
+grid(
+  'Electromagnetism',
+  [
+    ['Ohm', 1],
+    ['kiloohm', 1000],
+  ],
+  [1, 2, 5, 10, 20, 50],
+)
+grid(
+  'Electromagnetism',
+  [
+    ['Watt', 1],
+    ['kilowatt', 1000],
+  ],
+  [1, 2, 5, 10, 20, 50],
+)
+grid(
+  'Quantum, relativistic & atomic physics',
+  [
+    ['eV', E],
+    ['Joule', 1],
+  ],
+  [1, 2, 5, 10, 100, 1000, 1e6],
+)
+grid(
+  'Quantum, relativistic & atomic physics',
+  [
+    ['AMU', AMU],
+    ['kg', 1],
+    ['electronRestMass', 9.1093837015e-31],
+  ],
+  [1, 2, 5, 10, 20],
+)
+grid(
+  'Quantum, relativistic & atomic physics',
+  [
+    ['electron', E],
+    ['Coulomb', 1],
+  ],
+  [1, 2, 5, 10, 100, 1000],
+)
+grid(
+  'Angular dynamics',
+  [
+    ['RPM', 1 / 60],
+    ['Hz', 1],
+  ],
+  [1, 2, 10, 60, 120, 360, 1000],
+)
+grid(
+  'Angular dynamics',
+  [
+    ['rad', 1],
+    ['deg', Math.PI / 180],
+    ['rev', 2 * Math.PI],
+  ],
+  [1, 2, 10, 60, 90, 180, 360],
+)
+grid(
+  'Ideal gas law & thermodynamics',
+  [
+    ['Joule', 1],
+    ['BTU', BTU],
+    ['calorie', 4.184],
+    ['kWh', 3.6e6],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Ideal gas law & thermodynamics',
+  [
+    ['Watt', 1],
+    ['kilowatt', 1000],
+    ['HorsePower', HP],
+  ],
+  [1, 2, 5, 10, 20],
+)
+grid(
+  'Ideal gas law & thermodynamics',
+  [
+    ['atmosphere', ATM],
+    ['Pa', 1],
+    ['bar', 1e5],
+  ],
+  [1, 2, 5, 10],
+)
+grid(
+  'Dimensionless, unit prefix scaling & aliases',
+  [
+    ['milli', 1e-3],
+    ['centi', 1e-2],
+    ['kilo', 1e3],
+    ['mega', 1e6],
+    ['micro', 1e-6],
+    ['nano', 1e-9],
+  ],
+  [1, 2, 5, 10],
+)
+
+describe('Every requested unit alias', () => {
+  it.each(REQUESTED_ALIASES)('2 %s to self', (alias) => {
+    expect(evaluateLine(`2 ${alias} to ${alias}`).value?.n, alias).toBeCloseTo(2, 8)
+  })
+  it.each(REQUESTED_ALIASES)('5 %s to self', (alias) => {
+    expect(evaluateLine(`5 ${alias} to ${alias}`).value?.n, alias).toBeCloseTo(5, 8)
+  })
+  it.each(REQUESTED_ALIASES)('10 %s / 2 %s', (alias) => {
+    expect(evaluateLine(`10 ${alias} / 2 ${alias}`).value?.n, alias).toBeCloseTo(5, 6)
+  })
+  it.each(REQUESTED_ALIASES)('0 %s to self', (alias) => {
+    expect(evaluateLine(`0 ${alias} to ${alias}`).value?.n, alias).toBeCloseTo(0, 10)
+  })
+})
+
+describe('Every requested SI prefix', () => {
+  it.each(PREFIX_NAMES)('accepts %s second', (prefix) => {
+    const r = evaluateLine(`1 ${prefix} second to s`)
+    expect(Number.isFinite(r.value!.n), prefix).toBe(true)
+  })
+  it.each(PREFIX_NAMES)('accepts %s gram', (prefix) => {
+    const r = evaluateLine(`1 ${prefix} gram to g`)
+    expect(Number.isFinite(r.value!.n), prefix).toBe(true)
+  })
+  it.each(PREFIX_NAMES)('accepts %s watt', (prefix) => {
+    const r = evaluateLine(`1 ${prefix} watt to W`)
+    expect(Number.isFinite(r.value!.n), prefix).toBe(true)
+  })
+  it.each(PREFIX_NAMES)('accepts %s newton', (prefix) => {
+    const r = evaluateLine(`1 ${prefix} newton to N`)
+    expect(Number.isFinite(r.value!.n), prefix).toBe(true)
+  })
+})
+
+describe('Workspace default units', () => {
+  const keep: Array<[string, string, Record<string, string>]> = []
+  for (const n of [1, 2, 3, 5, 8, 10, 12, 15, 20, 25, 40, 50]) {
+    keep.push(
+      [`${n} in stays in`, `${n} in`, { length: 'in' }],
+      [`${n} ft stays ft`, `${n} ft`, { length: 'ft' }],
+      [`${n} m stays m`, `${n} m`, { length: 'm' }],
+      [`${n} kg stays kg`, `${n} kg`, { mass: 'kg' }],
+      [`${n} lb stays lb`, `${n} lb`, { mass: 'lb' }],
+      [`${n} s stays s`, `${n} s`, { time: 's' }],
+      [`${n} hr stays hr`, `${n} hr`, { time: 'hr' }],
+      [`${n} deg stays deg`, `${n} deg`, { angle: 'deg' }],
+    )
+  }
+  it.each(keep)('%s', (_name, expr, defaults) => {
+    const n = Number(expr.split(' ')[0])
+    const r = evaluateLine(expr, { defaultUnits: defaults })
+    expect(r.value?.n).toBeCloseTo(n, 8)
+  })
+  it('converts mm into default inches for several values', () => {
+    for (const n of [25.4, 50.8, 76.2, 127]) {
+      const r = evaluateLine(`${n} mm`, { defaultUnits: { length: 'in' } })
+      expect(r.display).toMatch(/in$/)
+      expect(r.value?.n).toBeCloseTo(n / 25.4, 6)
+    }
+  })
+})
+
+describe('Unit conversion phrases', () => {
+  const ok: Array<[string, number]> = [
+    ['5 in to cm', 12.7],
+    ['5 inches to cm', 12.7],
+    ['5 in in cm', 12.7],
+    ['12 in to ft', 1],
+    ['3 ft to yd', 1],
+    ['1760 yd to mi', 1],
+    ['1000 m to km', 1],
+    ['2.54 cm to in', 1],
+    ['16 oz to lb', 1],
+    ['1000 g to kg', 1],
+    ['60 s to min', 1],
+    ['60 min to hr', 1],
+    ['24 hr to day', 1],
+    ['7 day to week', 1],
+    ['1000 mL to L', 1],
+    ['4 qt to gal', 1],
+    ['8 floz to cup', 1],
+    ['2 cup to pt', 1],
+    ['2 pt to qt', 1],
+    ['180 deg to rad', Math.PI],
+    ['1 rad to deg', 180 / Math.PI],
+    ['60 RPM to Hz', 1],
+    ['1 hp to W', HP],
+    ['1000 W to kW', 1],
+    ['1 atm to Pa', ATM],
+    ['14.696 psi to atm', (14.696 * PSI) / ATM],
+    ['1 kWh to J', 3.6e6],
+    ['1 cal to J', 4.184],
+    ['10 miles to kilometers', 16.09344],
+    ['10 kilometers to miles', 10 / 1.609344],
+    ['6 feet to meters', 6 * FT],
+    ['100 yards to meters', 100 * YD],
+    ['2 in to mm', 50.8],
+    ['2 in to m', 0.0508],
+    ['3 kg to g', 3000],
+    ['500 g to kg', 0.5],
+    ['2 L to mL', 2000],
+    ['1 m^2 to cm^2', 10000],
+    ['1 acre to ft^2', 43560],
+    ['1 hectare to m^2', 10000],
+    ['60 mph to km/h', 96.56064],
+    ['100 km/h to m/s', 100 / 3.6],
+    ['1 N to dynes', 1e5],
+    ['1 bar to Pa', 1e5],
+    ['1 kPa to Pa', 1000],
+    ['1 MJ to J', 1e6],
+    ['1 kW to W', 1000],
+    ['1 mA to A', 0.001],
+    ['1 kV to V', 1000],
+    ['1 microfarad to Farad', 1e-6],
+    ['1 nanofarad to Farad', 1e-9],
+    ['1 mH to H', 0.001],
+    ['1 kOhm to Ohm', 1000],
+    ['1 GHz to Hz', 1e9],
+    ['1 ms to s', 0.001],
+    ['1 us to s', 1e-6],
+    ['1 ns to s', 1e-9],
+    ['1 mg to g', 0.001],
+    ['1 ug to g', 1e-6],
+    ['1 mm to m', 0.001],
+    ['1 cm to m', 0.01],
+    ['1 nm to m', 1e-9],
+    ['1 um to m', 1e-6],
+    ['1 nmi to m', 1852],
+    ['1 ly to m', C * YEAR],
+    ['1 au to m', AU],
+    ['1 millihenry to Henry', 0.001],
+    ['2 kilovolt to Volt', 2000],
+  ]
+  it.each(ok)('%s', (input, expected) => {
+    const r = evaluateLine(input)
+    expect(r.value?.n, input).toBeCloseTo(expected, 6)
+  })
+  const bad = [
+    '1 kg to s',
+    '2 L to W',
+    '3 m to Pa',
+    '4 J to m',
+    '5 A to kg',
+    '6 V to m/s',
+    '7 Ohm to liter',
+    '8 Farad to acre',
+    '9 Henry to day',
+    '1 coulomb to meter',
+    '2 watts to grams',
+    '3 psi to seconds',
+    '4 hp to inches',
+    '5 K to meters',
+    '6 rad to kg',
+    '7 Hz to liters',
+    '8 N to seconds',
+    '9 Pa to amps',
+    '1 m^2 to kg',
+    '2 ft^3 to W',
+    '3 mph to J',
+    '4 acre to volt',
+    '5 gal to N',
+    '6 week to meter',
+    '7 tonne to liter',
+    '8 eV to amp',
+    '9 barn to second',
+    '1 drop to watt',
+    '2 slug to volt',
+    '3 furlong to kg',
+  ]
+  it.each(bad)('rejects %s', (input) => {
+    expect(() => evaluateLine(input), input).not.toThrow()
+    const r = evaluateLine(input)
+    expect(r.display, input).toBe('improper unit conversion')
+  })
+})
+
+describe('Requested unit conversion examples', () => {
+  const rows: Array<[string, number, string]> = []
+  for (const n of [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 24, 25, 30, 36, 40, 48, 50, 60, 72, 90, 100, 120, 144, 200, 250, 300, 360, 500, 1000]) {
+    rows.push([`${n} in`, n * 25.4, 'mm'], [`${n} in to m`, n * 0.0254, 'm'], [`${n} ft to m`, n * FT, 'm'])
+  }
+  it.each(rows)('%s', (input, expected, unit) => {
+    const r = evaluateLine(input)
+    expect(r.value?.n, input).toBeCloseTo(expected, 6)
+    expect(r.display, input).toMatch(new RegExp(`${unit}$`))
+  })
+  for (const n of [1, 2, 5, 10, 20]) {
+    it(`${n} lb defaults to kg`, () => {
+      const r = evaluateLine(`${n} lb`)
+      expect(r.value?.n).toBeCloseTo(n * LB, 8)
+      expect(r.display).toMatch(/kg$/)
+    })
+    it(`${n} kg defaults to lbs`, () => {
+      const r = evaluateLine(`${n} kg`)
+      expect(r.value?.n).toBeCloseTo(n / LB, 8)
+    })
+  }
+})
+
+scaledCross('Cross-unit: length × length → area', (n) => ({
+  name: `extra ${n} m * 2 in`,
+  expr: `${n} m * 2 in`,
+  si: n * 2 * IN,
+  siUnit: 'm^2',
+}))
+scaledCross('Cross-unit: area × length → volume', (n) => ({
+  name: `extra ${n} m^2 * 2 cm`,
+  expr: `${n} m^2 * 2 cm`,
+  si: n * 0.02,
+  siUnit: 'm^3',
+}))
+scaledCross('Cross-unit: mass × acceleration → force', (n) => ({
+  name: `extra ${n} kg * 2 m/s^2`,
+  expr: `${n} kg * 2 m/s^2`,
+  si: n * 2,
+  siUnit: 'N',
+}))
+scaledCross('Cross-unit: force × distance → energy', (n) => ({
+  name: `extra ${n} N * 2 m`,
+  expr: `${n} N * 2 m`,
+  si: n * 2,
+  siUnit: 'J',
+}))
+scaledCross('Cross-unit: pressure × area → force', (n) => ({
+  name: `extra ${n} Pa * 2 m^2`,
+  expr: `${n} Pa * 2 m^2`,
+  si: n * 2,
+  siUnit: 'N',
+}))
+scaledCross('Cross-unit: electrical products & quotients', (n) => ({
+  name: `extra ${n} V * 2 A`,
+  expr: `${n} V * 2 A`,
+  si: n * 2,
+  siUnit: 'W',
+}))
+scaledCross('Cross-unit: power × time → energy', (n) => ({
+  name: `extra ${n} W * 2 s`,
+  expr: `${n} W * 2 s`,
+  si: n * 2,
+  siUnit: 'J',
+}))
+scaledCross('Cross-unit: length / time → velocity & acceleration', (n) => ({
+  name: `extra ${n} m / 2 s`,
+  expr: `${n} m / 2 s`,
+  si: n / 2,
+  siUnit: 'm/s',
+}))
+scaledCross('Cross-unit: mass / volume → density & volumetric flow', (n) => ({
+  name: `extra ${n} kg / 2 L`,
+  expr: `${n} kg / 2 L`,
+  si: (n / 0.002),
+  siUnit: 'kg / m^3',
+}))
+scaledCross('Cross-unit: energy / time → power', (n) => ({
+  name: `extra ${n} J / 2 s`,
+  expr: `${n} J / 2 s`,
+  si: n / 2,
+  siUnit: 'W',
+}))
+scaledCross('Cross-unit: dimensionless ratios', (n) => ({
+  name: `extra ${n} m / 1 m`,
+  expr: `${n} m / 1 m`,
+  si: n,
+}))
+scaledCross('Cross-unit: rotational & frequency operations', (n) => ({
+  name: `extra ${n} deg / 1 s`,
+  expr: `${n} deg / 1 s`,
+  si: (n * Math.PI) / 180,
+  siUnit: 'rad / s',
+}))
+scaledCross('Cross-unit: multi-operator physics expressions', (n) => ({
+  name: `extra 0.5 * ${n} kg * (2 m/s)^2`,
+  expr: `0.5 * ${n} kg * (2 m/s)^2`,
+  si: 0.5 * n * 4,
+  siUnit: 'J',
+}))
+scaledCross(
+  'Cross-unit: addition & subtraction of compatible dimensions',
+  (n) => ({
+    name: `extra ${n} m + 2 m`,
+    expr: `${n} m + 2 m`,
+    si: n + 2,
+    siUnit: 'm',
+    live: false,
+  }),
+  1,
+  96,
+)

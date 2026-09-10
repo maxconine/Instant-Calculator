@@ -2,6 +2,7 @@ import {
   IMPROPER_UNIT_CONVERSION,
   isImproperUnitConversion,
 } from '../engine/units'
+import { nativeWindow } from './bridge'
 
 export type NativeEvalRequest = {
   id: number
@@ -24,22 +25,10 @@ export type NativeLive = {
   n?: number
 }
 
-type InstantHandler = { postMessage: (m: string | Record<string, unknown>) => void }
-type SoulverHandler = { postMessage: (m: Record<string, unknown> | string) => Promise<unknown> }
-
-type NativeWindow = Window & {
-  __INSTANT_NATIVE?: boolean
-  webkit?: { messageHandlers?: { soulver?: SoulverHandler; instant?: InstantHandler } }
-}
-
-function nativeWindow(): NativeWindow | undefined {
-  return typeof window === 'undefined' ? undefined : (window as NativeWindow)
-}
-
 export function hasNativeEval(): boolean {
   const w = nativeWindow()
   if (!w) return false
-  return Boolean(w.__INSTANT_NATIVE || w.webkit?.messageHandlers?.soulver || w.webkit?.messageHandlers?.instant)
+  return Boolean(w.__QCALC_NATIVE || w.webkit?.messageHandlers?.soulver || w.webkit?.messageHandlers?.qcalc)
 }
 
 /** WKWebView rejects objects that contain `undefined`, so omit optional fields instead of spreading. */
@@ -96,25 +85,17 @@ export async function evaluateNative(req: NativeEvalRequest): Promise<NativeEval
     try {
       return normalizeReply(await soulver.postMessage(payload), req)
     } catch {
-      /* use the legacy handler below */
+      /* use the host handler below */
     }
   }
-  const instant = w?.webkit?.messageHandlers?.instant
-  if (!instant) return null
+  const host = w?.webkit?.messageHandlers?.qcalc
+  if (!host) return null
   try {
-    instant.postMessage(`eval:${JSON.stringify(payload)}`)
+    host.postMessage(payload)
   } catch {
-    try {
-      instant.postMessage(payload)
-    } catch {
-      return null
-    }
+    return null
   }
   return null
-}
-
-export function requestNativeEval(req: NativeEvalRequest): void {
-  void evaluateNative(req)
 }
 
 export function mergeLiveAnswer(
@@ -124,7 +105,8 @@ export function mergeLiveAnswer(
   native: NativeLive | null,
 ): { display: string; n?: number } {
   if (!expr.trim()) return { display: '' }
-  const nativeHit = native && native.expr === expr && usableNativeDisplay(native.display) ? native : null
+  const nativeDisplay = native && native.expr === expr ? usableNativeDisplay(native.display) : ''
+  const nativeHit = native && nativeDisplay ? { ...native, display: nativeDisplay } : null
   if (nativeHit && looksLikeNaturalLanguage(expr)) {
     return { display: nativeHit.display, n: nativeHit.n }
   }

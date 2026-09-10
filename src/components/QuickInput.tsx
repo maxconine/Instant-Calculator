@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react'
+import { inferParens } from '../engine/parens'
+import { nativeWindow } from '../lib/bridge'
 
 export interface QuickInputHandle {
   insert: (chunk: string) => void
@@ -66,17 +68,7 @@ export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, h
     else if (!metaRef.current) heldRef.current = ''
   }
 
-  let depth = 0
-  let minDepth = 0
-  for (const ch of value) {
-    if (ch === '(') depth++
-    else if (ch === ')') {
-      depth--
-      if (depth < minDepth) minDepth = depth
-    }
-  }
-  const leadingCount = -minDepth
-  const trailingCount = depth + leadingCount
+  const { leading: leadingCount, trailing: trailingCount } = inferParens(value)
   const prefix = leadingCount > 0 ? '('.repeat(leadingCount) : ''
   const suffix = trailingCount > 0 ? ')'.repeat(trailingCount) : ''
 
@@ -119,12 +111,14 @@ export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, h
       highlighted: () => readHighlight(el) || heldRef.current,
     }
     if (handleRef) handleRef.current = api
-    const w = window as Window & { __instantFocus?: () => void; __INSTANT_KEYS?: string[] }
-    w.__instantFocus = () => el.focus()
-    const buffered = w.__INSTANT_KEYS
-    if (buffered?.length) {
-      commit((el.value || '') + buffered.join(''), ((el.value || '') + buffered.join('')).length)
-      w.__INSTANT_KEYS = []
+    const w = nativeWindow()
+    if (w) {
+      w.__qcalcFocus = () => el.focus()
+      const buffered = w.__QCALC_KEYS
+      if (buffered?.length) {
+        commit((el.value || '') + buffered.join(''), ((el.value || '') + buffered.join('')).length)
+        w.__QCALC_KEYS = []
+      }
     }
     const timers = [0, 40, 120, 280].map((ms) => window.setTimeout(() => el.focus(), ms))
     const onMeta = (e: globalThis.KeyboardEvent) => {

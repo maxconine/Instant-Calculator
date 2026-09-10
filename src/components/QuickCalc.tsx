@@ -3,13 +3,14 @@ import { evaluateSheet } from '../engine/evaluate'
 import { clampSigFigs, DEFAULT_SIG_FIGS } from '../engine/format'
 import { defaultUnitsEqual, isImproperUnitConversion, sanitizeDefaultUnits, type DefaultUnits } from '../engine/units'
 import { UnitSettings } from './UnitSettings'
-import { insertableHistoryAnswer, type AnswerForm } from '../lib/answer'
+import { insertableHistoryAnswer, visibleAnswer, type AnswerForm } from '../lib/answer'
 import {
   clampDraftSeconds,
   DEFAULT_DRAFT_SECONDS,
   hideAction,
   shouldRestoreDraft,
 } from '../lib/draft'
+import { nativeHandler, nativeWindow, type NativeWindow, type StoredDraft } from '../lib/bridge'
 import {
   evaluateNative,
   hasNativeEval,
@@ -31,22 +32,10 @@ type Settings = {
   defaultUnits: DefaultUnits
 }
 
-type InstantBridge = {
-  webkit?: {
-    messageHandlers?: {
-      instant?: { postMessage: (m: string | Record<string, unknown>) => void }
-      soulver?: { postMessage: (m: Record<string, unknown> | string) => Promise<unknown> }
-    }
-  }
-  __instantFocus?: () => void
-  __instantReset?: () => void
-  __instantWillHide?: () => void
-  __instantSize?: () => void
-  __instantApplySettings?: (s: Partial<Settings>) => void
-  __instantNativeResult?: (reply: NativeEvalReply) => void
-  __INSTANT_NATIVE?: boolean
-  __INSTANT_KEYS?: string[]
-  __INSTANT_SETTINGS?: Partial<Settings>
+type CalcWindow = NativeWindow & {
+  __QCALC_SETTINGS?: Partial<Settings>
+  __qcalcApplySettings?: (s: Partial<Settings>) => void
+  __qcalcNativeResult?: (reply: NativeEvalReply) => void
 }
 
 export type HistoryRow = {
@@ -57,10 +46,27 @@ export type HistoryRow = {
   n?: number
 }
 
-const HISTORY_KEY = 'instant-solver-history'
-const SETTINGS_KEY = 'instant-solver-settings'
-const DRAFT_KEY = 'instant-solver-draft'
+const HISTORY_KEY = 'qcalc-history'
+const SETTINGS_KEY = 'qcalc-settings'
+const DRAFT_KEY = 'qcalc-draft'
+const LEGACY_HISTORY_KEY = 'instant-solver-history'
+const LEGACY_SETTINGS_KEY = 'instant-solver-settings'
+const LEGACY_DRAFT_KEY = 'instant-solver-draft'
 const MAX_HISTORY = 10
+
+function readStorage(key: string, legacy: string): string | null {
+  try {
+    const cur = localStorage.getItem(key)
+    if (cur != null) return cur
+    const old = localStorage.getItem(legacy)
+    if (old == null) return null
+    localStorage.setItem(key, old)
+    localStorage.removeItem(legacy)
+    return old
+  } catch {
+    return null
+  }
+}
 
 function defaultSettings(): Settings {
   return {
@@ -73,25 +79,19 @@ function defaultSettings(): Settings {
   }
 }
 
-function nativeBridge() {
-  return (window as Window & InstantBridge).webkit?.messageHandlers?.instant
-}
-
 function dismissNative(): void {
-  nativeBridge()?.postMessage('dismiss')
-  nativeBridge()?.postMessage({ type: 'dismiss' })
+  nativeHandler()?.postMessage({ type: 'dismiss' })
 }
 
 function reportNativeHeight(el: HTMLElement | null): void {
   if (!el) return
   const height = Math.ceil(el.getBoundingClientRect().height)
-  nativeBridge()?.postMessage(`height:${height}`)
-  nativeBridge()?.postMessage({ type: 'size', height })
+  nativeHandler()?.postMessage({ type: 'size', height })
 }
 
 function loadHistory(): HistoryRow[] {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
+    const raw = readStorage(HISTORY_KEY, LEGACY_HISTORY_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as Array<Partial<HistoryRow> & { latex?: string }>
     if (!Array.isArray(parsed)) return []
@@ -121,35 +121,59 @@ function mergeSettings(partial: Partial<Settings> | undefined, base: Settings): 
   }
 }
 
-type StoredDraft = { expr: string; savedAt: number }
+let memoryDraft: StoredDraft | null = null
+
+function windowDraft(): CalcWindow {
+  return (nativeWindow() ?? (window as CalcWindow))
+}
+
+function draftFromUnknown(raw: unknown): StoredDraft | null {
+  if (!raw || typeof raw !== 'object') return null
+  const parsed = raw as Partial<StoredDraft>
+  const expr = typeof parsed.expr === 'string' ? parsed.expr : ''
+  const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
+  if (!expr.trim() || savedAt <= 0) return null
+  return { expr, savedAt }
+}
 
 function readStoredDraft(draftSeconds: number, now = Date.now()): StoredDraft | null {
+  let stored: StoredDraft | null = memoryDraft ?? draftFromUnknown(windowDraft().__QCALC_DRAFT)
   try {
-    const raw = localStorage.getItem(DRAFT_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<StoredDraft>
-    const expr = typeof parsed.expr === 'string' ? parsed.expr : ''
-    const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
-    if (!expr.trim() || !shouldRestoreDraft(savedAt, now, draftSeconds)) {
-      localStorage.removeItem(DRAFT_KEY)
-      return null
-    }
-    return { expr, savedAt }
+    const raw = readStorage(DRAFT_KEY, LEGACY_DRAFT_KEY)
+    stored = draftFromUnknown(raw ? JSON.parse(raw) : null) ?? stored
   } catch {
+    /* use memory */
+  }
+  if (!stored || !shouldRestoreDraft(stored.savedAt, now, draftSeconds)) {
+    clearStoredDraft()
     return null
   }
+  return stored
 }
 
 function writeStoredDraft(expr: string, savedAt = Date.now()): void {
   if (!expr.trim()) {
-    localStorage.removeItem(DRAFT_KEY)
+    clearStoredDraft()
     return
   }
-  localStorage.setItem(DRAFT_KEY, JSON.stringify({ expr, savedAt } satisfies StoredDraft))
+  const draft = { expr, savedAt } satisfies StoredDraft
+  memoryDraft = draft
+  windowDraft().__QCALC_DRAFT = draft
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    /* WKWebView private stores can reject localStorage; memory still restores. */
+  }
 }
 
 function clearStoredDraft(): void {
-  localStorage.removeItem(DRAFT_KEY)
+  memoryDraft = null
+  windowDraft().__QCALC_DRAFT = null
+  try {
+    localStorage.removeItem(DRAFT_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 function settingsEqual(a: Settings, b: Settings): boolean {
@@ -167,12 +191,12 @@ function loadSettings(): Settings {
   const fallback = defaultSettings()
   let stored = fallback
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
+    const raw = readStorage(SETTINGS_KEY, LEGACY_SETTINGS_KEY)
     if (raw) stored = mergeSettings(JSON.parse(raw) as Partial<Settings>, fallback)
   } catch {
     stored = fallback
   }
-  const injected = (window as Window & InstantBridge).__INSTANT_SETTINGS
+  const injected = windowDraft().__QCALC_SETTINGS
   return injected ? mergeSettings(injected, stored) : stored
 }
 
@@ -182,7 +206,7 @@ function uid(): string {
 
 function copyText(text: string): void {
   if (!text) return
-  nativeBridge()?.postMessage({ type: 'copy', text })
+  nativeHandler()?.postMessage({ type: 'copy', text })
   void navigator.clipboard.writeText(text).catch(() => {
     const el = document.createElement('textarea')
     el.value = text
@@ -221,7 +245,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
   const [history, setHistory] = useState<HistoryRow[]>(loadHistory)
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [q, setQ] = useState(() => readStoredDraft(loadSettings().draftSeconds)?.expr ?? '')
-  const [copied, setCopied] = useState<false | 'exact' | 'decimal'>(false)
+  const [copied, setCopied] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
   const [tapeOpen, setTapeOpen] = useState(false)
   const [nativeLive, setNativeLive] = useState<NativeLive | null>(null)
@@ -280,6 +304,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
   const display = merged.display
   const liveN = merged.n
   const liveExact = q.trim() && jsDisplay ? live?.exact : undefined
+  const shownLive = visibleAnswer({ display, exact: liveExact }, settings.answerForm)
   displayRef.current = display
   exactRef.current = liveExact
   liveNRef.current = liveN
@@ -313,7 +338,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
-    nativeBridge()?.postMessage({ type: 'settings', sigFigs: settings.sigFigs })
+    nativeHandler()?.postMessage({ type: 'settings', sigFigs: settings.sigFigs })
   }, [settings])
 
   useEffect(() => {
@@ -330,8 +355,8 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     }
   }, [history.length, selected, tapeOpen])
 
-  const flashCopied = useCallback((kind: 'exact' | 'decimal' = 'decimal') => {
-    setCopied(kind)
+  const flashCopied = useCallback(() => {
+    setCopied(true)
     window.clearTimeout(copiedTimer.current)
     copiedTimer.current = window.setTimeout(() => setCopied(false), 1200)
   }, [])
@@ -343,11 +368,11 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
       return
     }
     const row = selected != null ? history[selected] : null
-    const text = row?.display || display
-    if (!text) return
+    const text = row ? visibleAnswer(row, settings.answerForm) : shownLive
+    if (!text || isImproperUnitConversion(text)) return
     copyText(text)
     flashCopied()
-  }, [display, flashCopied, history, selected])
+  }, [flashCopied, history, selected, settings.answerForm, shownLive])
 
   const insertHistoryAnswer = useCallback(
     (index: number) => {
@@ -363,20 +388,11 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     [history, settings.answerForm],
   )
 
-  const copyExact = useCallback(
-    (text: string) => {
-      if (!text) return
-      copyText(text)
-      flashCopied('exact')
-    },
-    [flashCopied],
-  )
-
   const copyLive = useCallback(() => {
-    if (!display) return
-    copyText(display)
-    flashCopied('decimal')
-  }, [display, flashCopied])
+    if (!shownLive || isImproperUnitConversion(shownLive)) return
+    copyText(shownLive)
+    flashCopied()
+  }, [flashCopied, shownLive])
 
   const commit = useCallback(() => {
     const expr = qRef.current
@@ -457,9 +473,13 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     const expr = qRef.current
     const draftLive = shouldRestoreDraft(draftAtRef.current, now, ttl)
 
+    if (ttl <= 0) {
+      if (expr.trim() || stored) resetToCalculate()
+      return
+    }
+
     if (expr.trim()) {
-      if (draftLive || stored) return
-      if (!draftAtRef.current) return
+      if (draftLive || stored || !draftAtRef.current) return
       resetToCalculate()
       return
     }
@@ -539,15 +559,15 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
       if (highlighted) {
         e.preventDefault()
         e.clipboardData?.setData('text/plain', highlighted)
-        nativeBridge()?.postMessage({ type: 'copy', text: highlighted })
+        nativeHandler()?.postMessage({ type: 'copy', text: highlighted })
         return
       }
       const row = selected != null ? history[selected] : null
-      const text = row?.display || display
-      if (!text) return
+      const text = row ? visibleAnswer(row, settings.answerForm) : shownLive
+      if (!text || isImproperUnitConversion(text)) return
       e.preventDefault()
       e.clipboardData?.setData('text/plain', text)
-      nativeBridge()?.postMessage({ type: 'copy', text })
+      nativeHandler()?.postMessage({ type: 'copy', text })
       flashCopied()
     }
     window.addEventListener('keydown', onKey, true)
@@ -556,7 +576,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('copy', onCopy, true)
     }
-  }, [copyOutput, display, embedded, flashCopied, history, onClose, onWillHide, resetToCalculate, selected])
+  }, [copyOutput, embedded, flashCopied, history, onClose, onWillHide, resetToCalculate, selected, settings.answerForm, shownLive])
 
   useEffect(() => () => stopDraftTimer(), [stopDraftTimer])
 
@@ -582,22 +602,22 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
   }, [q, lastAns, settings.sigFigs, nativeVars])
 
   useEffect(() => {
-    const w = window as Window & InstantBridge
+    const w = windowDraft()
     const size = () => reportNativeHeight(rootRef.current)
-    w.__instantFocus = () => mathRef.current?.focus()
-    w.__instantSize = size
-    w.__instantWillHide = () => onWillHide()
-    w.__instantReset = () => {
+    w.__qcalcFocus = () => mathRef.current?.focus()
+    w.__qcalcSize = size
+    w.__qcalcWillHide = () => onWillHide()
+    w.__qcalcReset = () => {
       onPrepare()
       requestAnimationFrame(size)
     }
-    w.__instantApplySettings = (partial) => {
+    w.__qcalcApplySettings = (partial) => {
       setSettings((prev) => {
         const next = mergeSettings(partial, prev)
         return settingsEqual(next, prev) ? prev : next
       })
     }
-    w.__instantNativeResult = (reply) => {
+    w.__qcalcNativeResult = (reply) => {
       const next = nativeReplyToLive(reply, evalIdRef.current, qRef.current)
       if (next) {
         setNativeLive(next)
@@ -610,9 +630,9 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     const onSoulver = (event: Event) => {
       const reply = (event as CustomEvent<NativeEvalReply>).detail
       if (!reply) return
-      w.__instantNativeResult?.(reply)
+      w.__qcalcNativeResult?.(reply)
     }
-    window.addEventListener('instant-soulver', onSoulver)
+    window.addEventListener('qcalc-soulver', onSoulver)
     const el = rootRef.current
     size()
     const ro = el ? new ResizeObserver(() => reportNativeHeight(el)) : null
@@ -621,7 +641,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
     const t2 = window.setTimeout(() => mathRef.current?.focus(), 50)
     const t3 = window.setTimeout(() => mathRef.current?.focus(), 120)
     return () => {
-      window.removeEventListener('instant-soulver', onSoulver)
+      window.removeEventListener('qcalc-soulver', onSoulver)
       window.clearTimeout(t1)
       window.clearTimeout(t2)
       window.clearTimeout(t3)
@@ -687,8 +707,7 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
       onMouseDown={(e) => {
         const t = e.target as HTMLElement
         if (t.closest('input, button, .tape, .quick-plain, .quick-field, .modes, .unit-settings')) return
-        nativeBridge()?.postMessage({ type: 'drag' })
-        nativeBridge()?.postMessage('drag')
+        nativeHandler()?.postMessage({ type: 'drag' })
       }}
     >
       {tapeOpen && history.length > 0 ? (
@@ -712,33 +731,19 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
               >
                 {row.expr}
               </button>
-              <div className="tape-a">
-                {row.exact && row.exact !== row.display ? (
-                  <>
-                    <button
-                      type="button"
-                      className={`tape-exact ${settings.answerForm === 'exact' ? 'insert-target' : ''}`}
-                      title="Insert exact value at the cursor"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => insertHistoryAnswer(i)}
-                    >
-                      {row.exact}
-                    </button>
-                    <span className="tape-approx" aria-hidden>
-                      ≈
-                    </span>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  className={`tape-decimal ${settings.answerForm === 'approx' || !row.exact || row.exact === row.display ? 'insert-target' : ''}`}
-                  title="Insert approximation at the cursor"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => insertHistoryAnswer(i)}
-                >
-                  {row.display}
-                </button>
-              </div>
+              <button
+                type="button"
+                className="tape-a"
+                title={
+                  settings.answerForm === 'exact' && row.exact
+                    ? 'Insert exact value at the cursor'
+                    : 'Insert approximation at the cursor'
+                }
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertHistoryAnswer(i)}
+              >
+                {visibleAnswer(row, settings.answerForm)}
+              </button>
             </div>
           ))}
         </div>
@@ -773,24 +778,6 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
           >
             a/b
           </button>
-          <button
-            type="button"
-            className={settings.answerForm === 'exact' ? 'active' : ''}
-            title="Insert exact values from history"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setSettings((s) => ({ ...s, answerForm: 'exact' }))}
-          >
-            exact
-          </button>
-          <button
-            type="button"
-            className={settings.answerForm === 'approx' ? 'active' : ''}
-            title="Insert decimal approximations from history"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setSettings((s) => ({ ...s, answerForm: 'approx' }))}
-          >
-            approx
-          </button>
         </div>
         <QuickInput
           value={q}
@@ -804,38 +791,20 @@ export function QuickCalc({ onClose, embedded = false }: { onClose: () => void; 
           onUp={onUp}
           onDown={onDown}
         />
-        <div className={`live-group ${display ? '' : 'empty'}`}>
-          {liveExact && liveExact !== display ? (
-            <>
-              <button
-                type="button"
-                className={`live live-exact ${copied === 'exact' ? 'copied' : ''}`}
-                title="Copy exact value"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => copyExact(liveExact)}
-              >
-                {copied === 'exact' ? 'copied to clipboard' : liveExact}
-              </button>
-              <span className="live-approx" aria-hidden>
-                ≈
-              </span>
-            </>
-          ) : null}
-          <button
-            type="button"
-            className={`live ${copied === 'decimal' ? 'copied' : ''} ${display ? '' : 'empty'} ${isImproperUnitConversion(display) ? 'message' : ''}`}
-            title={
-              display && !isImproperUnitConversion(display)
-                ? 'Copy to clipboard · ⌘C also copies'
-                : undefined
-            }
-            disabled={!display || isImproperUnitConversion(display)}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={copyLive}
-          >
-            {copied === 'decimal' ? 'copied to clipboard' : display}
-          </button>
-        </div>
+        <button
+          type="button"
+          className={`live ${copied ? 'copied' : ''} ${shownLive ? '' : 'empty'} ${isImproperUnitConversion(shownLive) ? 'message' : ''}`}
+          title={
+            shownLive && !isImproperUnitConversion(shownLive)
+              ? 'Copy to clipboard · ⌘C also copies'
+              : undefined
+          }
+          disabled={!shownLive || isImproperUnitConversion(shownLive)}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={copyLive}
+        >
+          {copied ? 'copied' : shownLive}
+        </button>
       </div>
     </div>
     {!embedded ? (

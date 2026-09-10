@@ -1,6 +1,6 @@
 export { evaluateLine, evaluateSheet } from './evaluate'
-export { autofillParens, fillParens, inferParens } from './parens'
-export type { AutofilledParens, ParenFill } from './parens'
+export { fillParens, inferParens } from './parens'
+export type { ParenFill } from './parens'
 export { latexToAscii, tryPlainMath } from './plainMath'
 export { clampSigFigs, DEFAULT_SIG_FIGS, formatNumber, formatValue, MAX_SIG_FIGS, MIN_SIG_FIGS } from './format'
 export { dualLabel, exactForm } from './simplify'

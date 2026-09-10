@@ -33,12 +33,3 @@ export function inferParens(expr: string): ParenFill {
 export function fillParens(expr: string): string {
   return inferParens(expr).filled
 }
-
-export type AutofilledParens = ParenFill
-export const autofillParens = inferParens
-
-/** Namespace object so the production minify step cannot collide with mathjs. */
-export const parenFill = {
-  infer: inferParens,
-  fill: fillParens,
-}

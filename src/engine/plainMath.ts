@@ -1,4 +1,5 @@
 import type { Value } from './types'
+import { fillParens } from './parens'
 import { evalScientific, stitchConstants, wrapBareFunctions, type AngleMode } from './scientific'
 import { tryConvert, type DefaultUnits } from './units'
 
@@ -12,7 +13,7 @@ function looksLikeLatex(s: string): boolean {
 }
 
 /** Drop leading "what is" / trailing "?" so "what is 40% of 90" can use the existing percent-of path. */
-export function unwrapQuestion(text: string): string {
+function unwrapQuestion(text: string): string {
   const src = text.trim()
   if (!src) return src
   const stripped = src
@@ -240,18 +241,7 @@ export function tryPlainMath(
   const direct = evalScientific(ascii, ctx)
   if (direct) return direct
 
-  // Nested so production minify cannot collide with mathjs top-level names.
-  let depth = 0
-  let minDepth = 0
-  for (const ch of ascii) {
-    if (ch === '(') depth++
-    else if (ch === ')') {
-      depth--
-      if (depth < minDepth) minDepth = depth
-    }
-  }
-  const leading = -minDepth
-  const trailing = depth + leading
-  if (!leading && !trailing) return null
-  return evalScientific(`${'('.repeat(leading)}${ascii}${')'.repeat(trailing)}`, ctx)
+  const filled = fillParens(ascii)
+  if (filled === ascii) return null
+  return evalScientific(filled, ctx)
 }

@@ -1,4 +1,4 @@
-# Instant Solver
+# Q Calc
 
 A Spotlight-style scientific calculator for Mac. Press **Control + Option + Space** to calculate without leaving the app you’re in.
 
@@ -6,7 +6,7 @@ Type `sin(90)`, `72 f`, or `$10 for lunch + 15% tip` — the answer updates as y
 
 ## Install on Apple silicon
 
-You need an **Apple silicon Mac** (M1 or later) running **macOS 14** or later. Instant Solver is built from this repository.
+You need an **Apple silicon Mac** (M1 or later) running **macOS 14** or later. Q Calc is built from this repository.
 
 ### 1. Xcode
 
@@ -36,48 +36,50 @@ npm install
 npm run mac:install
 ```
 
-The first build downloads SoulverCore, compiles Instant Solver, and copies **Instant Solver.app** into `/Applications`.
+The first build downloads SoulverCore, compiles Q Calc, and copies **Q Calc.app** into `/Applications`. An older **Instant Solver.app** in Applications is removed.
 
 To build without installing:
 
 ```bash
 npm run mac
-open "macos/dist/Instant Solver.app"
 ```
+
+That writes `macos/dist/Q Calc.app`. If the clone is in **Documents** or **Desktop**, macOS may refuse to launch that copy because of folder security attributes — use `npm run mac:install` instead of opening the repo build directly.
 
 ### 4. First launch
 
 ```bash
-open "/Applications/Instant Solver.app"
+open "/Applications/Q Calc.app"
 ```
 
 The app is ad-hoc signed, not notarized. If macOS says it can’t be opened:
 
-1. Control-click **Instant Solver** in Applications and choose **Open**.
+1. Control-click **Q Calc** in Applications and choose **Open**.
 2. Or clear the quarantine flag, then open it:
 
 ```bash
-xattr -cr "/Applications/Instant Solver.app"
-open "/Applications/Instant Solver.app"
+xattr -cr "/Applications/Q Calc.app"
+open "/Applications/Q Calc.app"
 ```
 
-A **∑** icon appears in the menu bar. Instant Solver is a menu-bar app — it does not show in the Dock.
+The Q Calc icon appears in the menu bar. Q Calc is a menu-bar app — it does not show in the Dock.
 
 If **Control + Option + Space** does nothing, macOS is often using that shortcut for Input Sources. Turn the shortcut off in **System Settings → Keyboard → Input Sources → Edit**.
 
-To start Instant Solver at login, add it under **System Settings → General → Login Items & Extensions**.
+To start Q Calc at login, add it under **System Settings → General → Login Items & Extensions**.
 
-## Using Instant Solver
+## Using Q Calc
 
-- **Control + Option + Space** shows the calculator. **Esc** or a click outside the window hides it.
+- **Control + Option + Space** shows the calculator. **Esc** or a click outside the window hides it. What you were typing is kept for a while (see **Keep unfinished** in the menu).
 - Type as you would on a scientific calculator: `sin(90)`, `sqrt(2)`, `2^8`, `5!`. `pi` becomes π as you type.
 - **⌃D** switches between degrees and radians. **⌃F** toggles fraction results.
+- Answers default to exact form when one exists (`sqrt(12)` → `2sqrt(3)`). Choose **Answers → Approximate** in the menu bar for decimals.
 - Unit conversions work too: `72 f`, `2 in to cm`.
 - Natural-language math works in the Mac app via SoulverCore: `$10 for lunch + 15% tip`, `40 is what % of 90`, `3:45pm + 4 hr 10 min`.
 - The answer updates as you type. Click it or press **⌘C** to copy. Type `ans` to insert it at the cursor.
-- **Enter** saves the calculation to history. **Up arrow** or scroll the tape to see previous ones.
+- **Enter** saves the calculation to history. **Up arrow** or scroll the tape to see previous ones. Click a history row to insert that answer.
 
-The **∑** menu can show the calculator without the hotkey. Significant figures, how long to keep unfinished input, and default units are set from the same menu.
+The menu bar icon can show the calculator without the hotkey. Significant figures, exact vs approximate answers, how long to keep unfinished input, and default units are set from the same menu.
 
 ## Development
 
@@ -98,6 +100,6 @@ Runs the engine suite, including the scientific checklist in `src/engine/scienti
 
 ## License
 
-Instant Solver is [MIT](LICENSE).
+Q Calc is [MIT](LICENSE).
 
 The Mac app embeds [SoulverCore](https://github.com/soulverteam/SoulverCore), a closed-source natural language math engine. SoulverCore may be used in personal and private projects. [Contact the authors](mailto:contact@soulver.app) before using it in a public or commercial project (they offer options, including a free license with attribution). `npm run mac` downloads the official xcframework at build time.

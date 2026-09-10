@@ -1,9 +1,10 @@
 #!/bin/zsh
 set -euo pipefail
+export COPYFILE_DISABLE=1
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MAC="$ROOT/macos"
-APP="$MAC/dist/Instant Solver.app"
-BIN="$APP/Contents/MacOS/InstantSolver"
+DIST_APP="$MAC/dist/Q Calc.app"
 VENDOR="$MAC/vendor"
 SOULVER_VERSION="3.5.1"
 SOULVER_SHA256="36e51abc2d22b2f1000ceeb4468cfa9ce74f4cf3fb79097f7f3e004b7bf9e7c7"
@@ -17,7 +18,7 @@ for arg in "$@"; do
     --install) INSTALL=1 ;;
     -h|--help)
       echo "Usage: macos/build.sh [--install]"
-      echo "  --install   copy Instant Solver.app into /Applications"
+      echo "  --install   copy Q Calc.app into /Applications"
       exit 0
       ;;
     *)
@@ -27,6 +28,12 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Assemble and sign under /tmp. Codesign rejects Documents-folder provenance xattrs.
+STAGE="$(mktemp -d /tmp/qcalc.XXXXXX)"
+APP="$STAGE/Q Calc.app"
+BIN="$APP/Contents/MacOS/QCalc"
+trap 'rm -rf "$STAGE"' EXIT
 
 require() {
   if ! command -v "$1" >/dev/null; then
@@ -42,7 +49,7 @@ fi
 
 ARCH="$(uname -m)"
 if [[ "$ARCH" != "arm64" ]]; then
-  echo "Instant Solver is documented for Apple silicon. Detected $ARCH; continuing anyway." >&2
+  echo "Q Calc is documented for Apple silicon. Detected $ARCH; continuing anyway." >&2
 fi
 
 require xcrun "Install Xcode 26 or later, then run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
@@ -68,24 +75,17 @@ fetch_soulver() {
 
 make_icon() {
   local resources="$APP/Contents/Resources"
-  local work="$MAC/dist/iconwork"
+  local work="$STAGE/iconwork"
   local iconset="$work/AppIcon.iconset"
-  local src="$ROOT/public/favicon.svg"
-  mkdir -p "$iconset"
-  if ! qlmanage -t -s 1024 -o "$work" "$src" >/dev/null 2>&1; then
-    echo "Skipping app icon (Quick Look could not render $src)." >&2
-    rm -rf "$work"
+  local src="$ROOT/public/Qcalc_favi.png"
+  if [[ ! -f "$src" ]]; then
+    echo "Skipping app icon (missing $src)." >&2
     return
   fi
-  local -a generated
-  generated=("$work"/*.png(N))
-  if (( ${#generated} == 0 )); then
-    echo "Skipping app icon (no PNG from Quick Look)." >&2
-    rm -rf "$work"
-    return
-  fi
+  mkdir -p "$iconset" "$work"
+  cp "$src" "$resources/StatusIcon.png"
   local png="$work/icon-1024.png"
-  sips -s format png "${generated[1]}" --out "$png" >/dev/null
+  sips -s format png -z 1024 1024 "$src" --out "$png" >/dev/null
   local size
   for size in 16 32 128 256 512; do
     sips -z "$size" "$size" "$png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
@@ -100,22 +100,20 @@ sign_app() {
   local framework="$APP/Contents/Frameworks/SoulverCore.framework"
   codesign --force --sign - --timestamp=none "$framework/Versions/A"
   codesign --force --sign - --timestamp=none "$framework"
-  codesign --force --sign - --timestamp=none --identifier com.instantsolver.app "$BIN"
-  codesign --force --sign - --timestamp=none --identifier com.instantsolver.app "$APP"
+  codesign --force --sign - --timestamp=none --identifier com.maxconine.qcalc "$BIN"
+  codesign --force --sign - --timestamp=none --identifier com.maxconine.qcalc "$APP"
+  codesign --verify --deep "$APP"
 }
 
-install_app() {
-  local dest="/Applications/Instant Solver.app"
-  echo "Installing to $dest…"
+copy_app() {
+  local dest="$1"
   rm -rf "$dest"
+  mkdir -p "$(dirname "$dest")"
   ditto "$APP" "$dest"
-  xattr -cr "$dest" 2>/dev/null || true
-  echo "Installed $dest"
 }
 
 fetch_soulver
 
-rm -rf "$MAC/dist"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
 ditto "$SLICE/SoulverCore.framework" "$APP/Contents/Frameworks/SoulverCore.framework"
@@ -135,7 +133,7 @@ swiftc -parse-as-library \
   "$MAC/SoulverEval.swift" \
   "$MAC/Overlay.swift" \
   "$MAC/UnitSettings.swift" \
-  "$MAC/InstantSolverApp.swift" \
+  "$MAC/QCalcApp.swift" \
   -o "$BIN"
 
 cp "$MAC/Info.plist" "$APP/Contents/Info.plist"
@@ -150,8 +148,13 @@ chmod +x "$BIN"
 make_icon
 sign_app
 
-echo "Built $APP"
+rm -rf "$MAC/dist"
+copy_app "$DIST_APP"
+echo "Built $DIST_APP"
 
 if (( INSTALL )); then
-  install_app
+  echo "Installing to /Applications/Q Calc.app…"
+  rm -rf "/Applications/Instant Solver.app"
+  copy_app "/Applications/Q Calc.app"
+  echo "Installed /Applications/Q Calc.app"
 fi

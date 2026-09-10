@@ -30,6 +30,12 @@ export type HistoryAnswer = {
   n?: number
 }
 
+/** The value shown for a result: exact form by default, decimal when approx is on. */
+export function visibleAnswer(row: { display: string; exact?: string }, form: AnswerForm): string {
+  if (form === 'exact' && row.exact) return row.exact
+  return row.display
+}
+
 /** Previous-answer insert: exact form when that mode is on and one exists, otherwise the approximation. */
 export function insertableHistoryAnswer(row: HistoryAnswer, form: AnswerForm): string {
   if (form === 'exact' && row.exact) return insertableAnswer(row.exact)

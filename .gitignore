@@ -10,6 +10,9 @@ lerna-debug.log*
 # Dependencies and local env
 node_modules
 *.local
+.env
+.env.*
+coverage
 
 # Build output
 dist
