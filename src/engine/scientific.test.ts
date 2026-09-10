@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { insertableAnswer } from '../lib/answer'
 import { evaluateLine, evaluateSheet } from './evaluate'
+import { dualLabel } from './simplify'
 
 type Angle = 'deg' | 'rad'
 
@@ -21,6 +23,7 @@ type Case = {
   integer?: boolean
   listLength?: number
   matches?: string
+  exact?: string
 }
 
 function resultOf(c: Case) {
@@ -43,10 +46,13 @@ function run(c: Case): void {
     expect(r.display, label).toMatch(/∞|Infinity/)
     return
   }
+  if (c.exact !== undefined) {
+    expect(r.exact, `${label} exact`).toBe(c.exact)
+  }
   if (c.display !== undefined) {
     if (typeof c.display === 'string') expect(r.display, label).toBe(c.display)
     else expect(r.display, label).toMatch(c.display)
-    return
+    if (c.expected === undefined && !c.matches && c.listLength === undefined) return
   }
   if (c.listLength !== undefined) {
     expect(r.display.startsWith('['), label).toBe(true)
@@ -124,6 +130,8 @@ suite('Fractions & Decimals', [
   { name: 'Percent Key Function', input: '20%', expected: 0.2 },
   { name: 'Percent Of Calculation', input: '15% * 200', expected: 30 },
   { name: 'Percent Of Expression', input: '25 % of 80', display: '20' },
+  { name: 'What is percent of', input: 'what is 40% of 90', expected: 36 },
+  { name: 'What is percent of (capitalized)', input: 'What is 40% of 90?', expected: 36 },
 ])
 
 suite('Exponents, Powers & Roots', [
@@ -368,6 +376,114 @@ suite('Edge Cases, Domain Errors & Undefined Behavior', [
   { name: 'Inverse Hyperbolic Tangent Boundary', input: 'arctanh(1)', undefined: true },
 ])
 
+suite('Radical & Square Root Simplifications', [
+  { name: 'sqrt(12)', input: 'sqrt(12)', exact: '2sqrt(3)', expected: 3.464101615 },
+  { name: 'sqrt(12) unclosed paren', input: 'sqrt(12', exact: '2sqrt(3)', expected: 3.464101615 },
+  { name: 'sqrt(18)', input: 'sqrt(18)', exact: '3sqrt(2)', expected: 4.242640687 },
+  { name: 'sqrt(20)', input: 'sqrt(20)', exact: '2sqrt(5)', expected: 4.472135955 },
+  { name: 'sqrt(24)', input: 'sqrt(24)', exact: '2sqrt(6)', expected: 4.898979486 },
+  { name: 'sqrt(27)', input: 'sqrt(27)', exact: '3sqrt(3)', expected: 5.196152423 },
+  { name: 'sqrt(32)', input: 'sqrt(32)', exact: '4sqrt(2)', expected: 5.656854249 },
+  { name: 'sqrt(45)', input: 'sqrt(45)', exact: '3sqrt(5)', expected: 6.708203932 },
+  { name: 'sqrt(48)', input: 'sqrt(48)', exact: '4sqrt(3)', expected: 6.928203230 },
+  { name: 'sqrt(50)', input: 'sqrt(50)', exact: '5sqrt(2)', expected: 7.071067812 },
+  { name: 'sqrt(72)', input: 'sqrt(72)', exact: '6sqrt(2)', expected: 8.485281374 },
+  { name: 'sqrt(75)', input: 'sqrt(75)', exact: '5sqrt(3)', expected: 8.660254038 },
+  { name: 'sqrt(80)', input: 'sqrt(80)', exact: '4sqrt(5)', expected: 8.944271910 },
+  { name: 'sqrt(96)', input: 'sqrt(96)', exact: '4sqrt(6)', expected: 9.797958971 },
+  { name: 'sqrt(98)', input: 'sqrt(98)', exact: '7sqrt(2)', expected: 9.899494937 },
+  { name: 'sqrt(108)', input: 'sqrt(108)', exact: '6sqrt(3)', expected: 10.392304845 },
+  { name: 'sqrt(125)', input: 'sqrt(125)', exact: '5sqrt(5)', expected: 11.180339887 },
+  { name: 'sqrt(128)', input: 'sqrt(128)', exact: '8sqrt(2)', expected: 11.313708499 },
+  { name: 'sqrt(147)', input: 'sqrt(147)', exact: '7sqrt(3)', expected: 12.124355653 },
+  { name: 'sqrt(162)', input: 'sqrt(162)', exact: '9sqrt(2)', expected: 12.727922061 },
+  { name: 'sqrt(180)', input: 'sqrt(180)', exact: '6sqrt(5)', expected: 13.416407865 },
+  { name: 'sqrt(200)', input: 'sqrt(200)', exact: '10sqrt(2)', expected: 14.142135624 },
+  { name: 'sqrt(242)', input: 'sqrt(242)', exact: '11sqrt(2)', expected: 15.556349186 },
+  { name: 'sqrt(288)', input: 'sqrt(288)', exact: '12sqrt(2)', expected: 16.970562748 },
+  { name: 'sqrt(300)', input: 'sqrt(300)', exact: '10sqrt(3)', expected: 17.320508076 },
+  { name: 'sqrt(320)', input: 'sqrt(320)', exact: '8sqrt(5)', expected: 17.888543820 },
+  { name: 'sqrt(338)', input: 'sqrt(338)', exact: '13sqrt(2)', expected: 18.384776311 },
+  { name: 'sqrt(363)', input: 'sqrt(363)', exact: '11sqrt(3)', expected: 19.052558883 },
+  { name: 'sqrt(392)', input: 'sqrt(392)', exact: '14sqrt(2)', expected: 19.798989873 },
+  { name: 'sqrt(432)', input: 'sqrt(432)', exact: '12sqrt(3)', expected: 20.784609691 },
+  { name: 'sqrt(450)', input: 'sqrt(450)', exact: '15sqrt(2)', expected: 21.213203436 },
+  { name: 'sqrt(500)', input: 'sqrt(500)', exact: '10sqrt(5)', expected: 22.360679775 },
+  { name: 'sqrt(512)', input: 'sqrt(512)', exact: '16sqrt(2)', expected: 22.627416998 },
+  { name: 'sqrt(588)', input: 'sqrt(588)', exact: '14sqrt(3)', expected: 24.248711306 },
+  { name: 'sqrt(600)', input: 'sqrt(600)', exact: '10sqrt(6)', expected: 24.494897428 },
+  { name: 'sqrt(675)', input: 'sqrt(675)', exact: '15sqrt(3)', expected: 25.980762114 },
+  { name: 'sqrt(720)', input: 'sqrt(720)', exact: '12sqrt(5)', expected: 26.832815730 },
+  { name: 'sqrt(800)', input: 'sqrt(800)', exact: '20sqrt(2)', expected: 28.284271247 },
+  { name: 'sqrt(847)', input: 'sqrt(847)', exact: '11sqrt(7)', expected: 29.103264422 },
+  { name: 'sqrt(968)', input: 'sqrt(968)', exact: '22sqrt(2)', expected: 31.112698372 },
+  { name: 'sqrt(1008)', input: 'sqrt(1008)', exact: '12sqrt(7)', expected: 31.749015733 },
+  { name: 'sqrt(1089)', input: 'sqrt(1089)', exact: '33', expected: 33 },
+  { name: 'sqrt(1250)', input: 'sqrt(1250)', exact: '25sqrt(2)', expected: 35.355339059 },
+  { name: 'sqrt(1331)', input: 'sqrt(1331)', exact: '11sqrt(11)', expected: 36.482872694 },
+  { name: 'sqrt(1452)', input: 'sqrt(1452)', exact: '22sqrt(3)', expected: 38.105117767 },
+  { name: 'sqrt(1568)', input: 'sqrt(1568)', exact: '28sqrt(2)', expected: 39.597979746 },
+  { name: 'sqrt(1800)', input: 'sqrt(1800)', exact: '30sqrt(2)', expected: 42.426406871 },
+  { name: 'sqrt(2000)', input: 'sqrt(2000)', exact: '20sqrt(5)', expected: 44.721359550 },
+  { name: 'sqrt(2420)', input: 'sqrt(2420)', exact: '22sqrt(5)', expected: 49.193495505 },
+  { name: 'sqrt(2500)', input: 'sqrt(2500)', exact: '50', expected: 50 },
+  { name: 'sqrt(3200)', input: 'sqrt(3200)', exact: '40sqrt(2)', expected: 56.568542495 },
+  { name: 'Inserted exact radical evaluates', input: '2sqrt(3)', exact: '2sqrt(3)', expected: 2 * Math.sqrt(3) },
+])
+
+suite('Trigonometric & Inverse Trigonometric Simplifications', [
+  { name: 'sin(pi/6)', input: 'sin(pi/6)', angleMode: 'rad', exact: '1/2', expected: 0.5 },
+  { name: 'cos(pi/6)', input: 'cos(pi/6)', angleMode: 'rad', exact: 'sqrt(3)/2', expected: 0.866025404 },
+  { name: 'tan(pi/6)', input: 'tan(pi/6)', angleMode: 'rad', exact: 'sqrt(3)/3', expected: 0.577350269 },
+  { name: 'sin(pi/4)', input: 'sin(pi/4)', angleMode: 'rad', exact: 'sqrt(2)/2', expected: 0.707106781 },
+  { name: 'cos(pi/4)', input: 'cos(pi/4)', angleMode: 'rad', exact: 'sqrt(2)/2', expected: 0.707106781 },
+  { name: 'tan(pi/4)', input: 'tan(pi/4)', angleMode: 'rad', exact: '1', expected: 1 },
+  { name: 'sin(pi/3)', input: 'sin(pi/3)', angleMode: 'rad', exact: 'sqrt(3)/2', expected: 0.866025404 },
+  { name: 'cos(pi/3)', input: 'cos(pi/3)', angleMode: 'rad', exact: '1/2', expected: 0.5 },
+  { name: 'tan(pi/3)', input: 'tan(pi/3)', angleMode: 'rad', exact: 'sqrt(3)', expected: 1.732050808 },
+  { name: 'sin(pi/2)', input: 'sin(pi/2)', angleMode: 'rad', exact: '1', expected: 1 },
+  { name: 'cos(pi/2)', input: 'cos(pi/2)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'sin(0)', input: 'sin(0)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'cos(0)', input: 'cos(0)', angleMode: 'rad', exact: '1', expected: 1 },
+  { name: 'tan(0)', input: 'tan(0)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'sin(2*pi/3)', input: 'sin(2*pi/3)', angleMode: 'rad', exact: 'sqrt(3)/2', expected: 0.866025404 },
+  { name: 'cos(2*pi/3)', input: 'cos(2*pi/3)', angleMode: 'rad', exact: '-1/2', expected: -0.5 },
+  { name: 'tan(2*pi/3)', input: 'tan(2*pi/3)', angleMode: 'rad', exact: '-sqrt(3)', expected: -1.732050808 },
+  { name: 'sin(3*pi/4)', input: 'sin(3*pi/4)', angleMode: 'rad', exact: 'sqrt(2)/2', expected: 0.707106781 },
+  { name: 'cos(3*pi/4)', input: 'cos(3*pi/4)', angleMode: 'rad', exact: '-sqrt(2)/2', expected: -0.707106781 },
+  { name: 'tan(3*pi/4)', input: 'tan(3*pi/4)', angleMode: 'rad', exact: '-1', expected: -1 },
+  { name: 'sin(5*pi/6)', input: 'sin(5*pi/6)', angleMode: 'rad', exact: '1/2', expected: 0.5 },
+  { name: 'cos(5*pi/6)', input: 'cos(5*pi/6)', angleMode: 'rad', exact: '-sqrt(3)/2', expected: -0.866025404 },
+  { name: 'tan(5*pi/6)', input: 'tan(5*pi/6)', angleMode: 'rad', exact: '-sqrt(3)/3', expected: -0.577350269 },
+  { name: 'sin(pi)', input: 'sin(pi)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'cos(pi)', input: 'cos(pi)', angleMode: 'rad', exact: '-1', expected: -1 },
+  { name: 'arcsin(0)', input: 'arcsin(0)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'arcsin(1/2)', input: 'arcsin(1/2)', angleMode: 'rad', exact: 'pi/6', expected: 0.523598776 },
+  { name: 'arcsin(sqrt(2)/2)', input: 'arcsin(sqrt(2)/2)', angleMode: 'rad', exact: 'pi/4', expected: 0.785398163 },
+  { name: 'arcsin(sqrt(3)/2)', input: 'arcsin(sqrt(3)/2)', angleMode: 'rad', exact: 'pi/3', expected: 1.047197551 },
+  { name: 'arcsin(1)', input: 'arcsin(1)', angleMode: 'rad', exact: 'pi/2', expected: 1.570796327 },
+  { name: 'arccos(0)', input: 'arccos(0)', angleMode: 'rad', exact: 'pi/2', expected: 1.570796327 },
+  { name: 'arccos(1/2)', input: 'arccos(1/2)', angleMode: 'rad', exact: 'pi/3', expected: 1.047197551 },
+  { name: 'arccos(sqrt(2)/2)', input: 'arccos(sqrt(2)/2)', angleMode: 'rad', exact: 'pi/4', expected: 0.785398163 },
+  { name: 'arccos(sqrt(3)/2)', input: 'arccos(sqrt(3)/2)', angleMode: 'rad', exact: 'pi/6', expected: 0.523598776 },
+  { name: 'arccos(1)', input: 'arccos(1)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'arctan(0)', input: 'arctan(0)', angleMode: 'rad', exact: '0', expected: 0 },
+  { name: 'arctan(1/sqrt(3))', input: 'arctan(1/sqrt(3))', angleMode: 'rad', exact: 'pi/6', expected: 0.523598776 },
+  { name: 'arctan(1)', input: 'arctan(1)', angleMode: 'rad', exact: 'pi/4', expected: 0.785398163 },
+  { name: 'arctan(sqrt(3))', input: 'arctan(sqrt(3))', angleMode: 'rad', exact: 'pi/3', expected: 1.047197551 },
+  { name: 'arccos(-1/2)', input: 'arccos(-1/2)', angleMode: 'rad', exact: '2*pi/3', expected: 2.094395102 },
+  { name: 'arcsin(-1/2)', input: 'arcsin(-1/2)', angleMode: 'rad', exact: '-pi/6', expected: -0.523598776 },
+  { name: 'arctan(-1)', input: 'arctan(-1)', angleMode: 'rad', exact: '-pi/4', expected: -0.785398163 },
+  { name: 'arccos(-1)', input: 'arccos(-1)', angleMode: 'rad', exact: 'pi', expected: 3.141592654 },
+  { name: 'arcsin(-1)', input: 'arcsin(-1)', angleMode: 'rad', exact: '-pi/2', expected: -1.570796327 },
+  { name: 'arctan(-sqrt(3))', input: 'arctan(-sqrt(3))', angleMode: 'rad', exact: '-pi/3', expected: -1.047197551 },
+  { name: 'sin(7*pi/6)', input: 'sin(7*pi/6)', angleMode: 'rad', exact: '-1/2', expected: -0.5 },
+  { name: 'cos(7*pi/6)', input: 'cos(7*pi/6)', angleMode: 'rad', exact: '-sqrt(3)/2', expected: -0.866025404 },
+  { name: 'tan(7*pi/6)', input: 'tan(7*pi/6)', angleMode: 'rad', exact: 'sqrt(3)/3', expected: 0.577350269 },
+  { name: 'sin(pi/12)', input: 'sin(pi/12)', angleMode: 'rad', exact: '(sqrt(6)-sqrt(2))/4', expected: 0.258819045 },
+  { name: 'cos(pi/12)', input: 'cos(pi/12)', angleMode: 'rad', exact: '(sqrt(6)+sqrt(2))/4', expected: 0.965925826 },
+])
+
 function n(text: string, angleMode: Angle = 'deg'): number {
   const r = evaluateLine(text, { angleMode })
   if (r.value == null || r.value.kind === 'text' || !Number.isFinite(r.value.n)) {
@@ -404,5 +520,27 @@ describe('Additional latex and constant aliases', () => {
   it('uses the active angle mode for a bare cosine argument', () => {
     expect(Math.abs(n('cos(2)', 'rad') - Math.cos(2))).toBeLessThan(1e-8)
     expect(Math.abs(n('cos(2)', 'deg') - Math.cos((2 * Math.PI) / 180))).toBeLessThan(1e-8)
+  })
+})
+
+describe('Exact form vs decimal copy', () => {
+  it('keeps a decimal display so copy stays numeric', () => {
+    const r = evaluateLine('sqrt(12)')
+    expect(r.exact).toBe('2sqrt(3)')
+    expect(r.display).toMatch(/^3\.464/)
+    expect(r.display).not.toMatch(/sqrt|≈/)
+    expect(dualLabel(r.exact, r.display)).toBe(`2sqrt(3) ≈ ${r.display}`)
+  })
+
+  it('inserts the exact radical when that form is chosen', () => {
+    expect(insertableAnswer('2sqrt(3)')).toBe('2sqrt(3)')
+    expect(insertableAnswer('(sqrt(6)-sqrt(2))/4')).toBe('(sqrt(6)-sqrt(2))/4')
+  })
+
+  it('inserts the decimal when given the numeric result', () => {
+    const r = evaluateLine('sqrt(12)')
+    const inserted = insertableAnswer(r.display, r.value?.n)
+    expect(inserted).not.toMatch(/sqrt/)
+    expect(Number(inserted)).toBeCloseTo(Math.sqrt(12), 8)
   })
 })

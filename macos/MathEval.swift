@@ -114,9 +114,6 @@ private struct Parser {
     mutating func parseNumber() -> Double? {
         skip()
         let start = i
-        if i < s.count && (s[i] == "+" || s[i] == "-") && start == i {
-            // sign handled in unary
-        }
         var sawDigit = false
         while i < s.count && s[i].isNumber {
             sawDigit = true

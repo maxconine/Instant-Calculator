@@ -196,6 +196,11 @@ export function preprocessAscii(expr: string): string {
   s = s.replace(/\breal\b/g, 're').replace(/\bimag\b/g, 'im')
   s = s.replace(/\blog_(\d+(?:\.\d+)?)\s*\(([^)]+)\)/g, 'log($2, $1)')
   s = s.replace(/\blog\(([^,)]+)\)/g, 'log10($1)')
+  const implicitFns = FN.split('|')
+    .filter((n) => !WRAP_SKIP.has(n.toLowerCase()))
+    .sort((a, b) => b.length - a.length)
+    .join('|')
+  s = s.replace(new RegExp(`(\\d)(\\s*)(${implicitFns})\\b`, 'gi'), '$1*$2$3')
   s = wrapBareFunctions(s)
   s = rewriteFactorial(s)
   return s

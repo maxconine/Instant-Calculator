@@ -1,7 +1,8 @@
 import type { EvaluateOptions, LineResult, SheetInputLine, Value } from './types'
-import { formatValue } from './format'
+import { DEFAULT_SIG_FIGS, formatValue } from './format'
 import { tryPlainMath } from './plainMath'
 import { formatAsFraction } from './scientific'
+import { exactForm } from './simplify'
 
 const RESERVED = new Set(
   (
@@ -9,13 +10,14 @@ const RESERVED = new Set(
   ).split('|'),
 )
 
-function show(value: Value, fractionMode: boolean): string {
+function show(value: Value, fractionMode: boolean, sigFigs: number): string {
   if (value.kind === 'text' && value.text) return value.text
+  if (value.unit) return formatValue(value, sigFigs)
   if (fractionMode && value.kind === 'number') {
     const f = formatAsFraction(value.n)
     if (f) return f
   }
-  return formatValue(value)
+  return formatValue(value, sigFigs)
 }
 
 function numeric(value: Value | undefined): number | undefined {
@@ -28,6 +30,7 @@ export function evaluateSheet(lines: SheetInputLine[] | string[], options: Evalu
   const texts = lines.map((l) => (typeof l === 'string' ? l : l.text))
   const angleMode = options.angleMode ?? 'deg'
   const fractionMode = options.fractionMode ?? false
+  const sigFigs = options.sigFigs ?? DEFAULT_SIG_FIGS
   const variables: Record<string, number> = {}
   let lastAns = options.ans
   const results: LineResult[] = []
@@ -35,7 +38,7 @@ export function evaluateSheet(lines: SheetInputLine[] | string[], options: Evalu
   for (const raw of texts) {
     const trimmed = raw.trim()
     if (!trimmed) {
-      results.push({ raw, kind: 'empty', display: '', tags: [], dependsOn: [] })
+      results.push({ raw, kind: 'empty', display: '' })
       continue
     }
 
@@ -47,15 +50,18 @@ export function evaluateSheet(lines: SheetInputLine[] | string[], options: Evalu
       expr = assign[2].trim()
     }
 
-    const value = tryPlainMath(expr, { ans: lastAns, angleMode, variables })
+    let value: Value | null = null
+    try {
+      value = tryPlainMath(expr, { ans: lastAns, angleMode, variables, defaultUnits: options.defaultUnits })
+    } catch {
+      value = null
+    }
     if (!value) {
       results.push({
         raw,
         kind: variable ? 'assignment' : 'expression',
         display: '',
         variable,
-        tags: [],
-        dependsOn: [],
       })
       continue
     }
@@ -64,14 +70,21 @@ export function evaluateSheet(lines: SheetInputLine[] | string[], options: Evalu
     if (n !== undefined) lastAns = n
     if (variable && n !== undefined) variables[variable] = n
 
+    let display = ''
+    try {
+      display = show(value, fractionMode, sigFigs)
+    } catch {
+      display = ''
+    }
+    const exact =
+      value.kind === 'number' && !value.unit && Number.isFinite(value.n) ? (exactForm(value.n) ?? undefined) : undefined
     results.push({
       raw,
       kind: variable ? 'assignment' : 'expression',
       value,
-      display: show(value, fractionMode),
+      display,
+      exact,
       variable,
-      tags: [],
-      dependsOn: [],
     })
   }
 

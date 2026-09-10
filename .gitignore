@@ -7,9 +7,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies and local env
 node_modules
-public/mathlive-fonts
 *.local
+
+# Build output
+dist
+macos/dist
+macos/vendor
 
 # Editor directories and files
 .vscode/*

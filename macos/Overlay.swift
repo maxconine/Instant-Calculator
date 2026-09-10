@@ -9,6 +9,7 @@ extension Notification.Name {
 
 final class OverlayPanel: NSPanel {
     var onEscape: (() -> Void)?
+    var ignoreResignKey = false
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -24,19 +25,34 @@ final class OverlayPanel: NSPanel {
         }
         super.keyDown(with: event)
     }
+
+    override func resignKey() {
+        super.resignKey()
+        if !ignoreResignKey {
+            onEscape?()
+        }
+    }
 }
 
-final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+final class OverlayWebView: WKWebView {
+    override var needsPanelToBecomeKey: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
+}
+
+final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
     private var panel: OverlayPanel?
-    private var web: WKWebView?
+    private var web: OverlayWebView?
     private var fallback: NSView?
     private var escapeMonitor: Any?
     private var dragMonitor: Any?
+    private var clickAwayMonitor: Any?
+    private var clickAwayLocalMonitor: Any?
     private var webReady = false
     private var triedBundle = false
     private var triedDevServer = false
     private let overlayWidth: CGFloat = 680
-    private let overlayMinHeight: CGFloat = 58
+    private let overlayMinHeight: CGFloat = 72
+    private var settingsObserver: NSObjectProtocol?
 
     deinit {
         if let escapeMonitor {
@@ -44,6 +60,15 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         }
         if let dragMonitor {
             NSEvent.removeMonitor(dragMonitor)
+        }
+        if let clickAwayMonitor {
+            NSEvent.removeMonitor(clickAwayMonitor)
+        }
+        if let clickAwayLocalMonitor {
+            NSEvent.removeMonitor(clickAwayLocalMonitor)
+        }
+        if let settingsObserver {
+            NotificationCenter.default.removeObserver(settingsObserver)
         }
     }
 
@@ -60,8 +85,10 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
     }
 
     func hide() {
+        guard panel?.isVisible == true else { return }
+        notifyWebWillHide()
+        panel?.ignoreResignKey = true
         panel?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
     }
 
     func show() {
@@ -71,46 +98,73 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         }
         applySize(height: overlayMinHeight)
         position()
-        NSApp.setActivationPolicy(.regular)
-        NSApp.unhide(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        panel?.ignoreResignKey = true
+        panel?.orderFrontRegardless()
         panel?.makeKeyAndOrderFront(nil)
         panel?.makeFirstResponder(web)
         resetAndFocus()
-        DispatchQueue.main.async { [weak self] in self?.resetAndFocus() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.focusMath() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.focusMath() }
+        DispatchQueue.main.async { [weak self] in
+            self?.resetAndFocus()
+            self?.panel?.ignoreResignKey = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.focusInput() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.focusInput() }
         NotificationCenter.default.post(name: .focusOverlay, object: nil)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "soulver" {
+            pushSoulverResult(soulverPayload(from: message.body))
+            return
+        }
         guard message.name == "instant" else { return }
         if let body = message.body as? String {
             handleMessage(body)
             return
         }
         if let dict = message.body as? [String: Any] {
-            if let type = dict["type"] as? String, type == "size", let height = dict["height"] as? Double {
-                applySize(height: CGFloat(height))
-            }
-            if let type = dict["type"] as? String, type == "dismiss" {
+            switch dict["type"] as? String {
+            case "size":
+                if let height = dict["height"] as? Double {
+                    applySize(height: CGFloat(height))
+                }
+            case "dismiss":
                 hide()
-            }
-            if let type = dict["type"] as? String, type == "copy", let text = dict["text"] as? String {
-                copyToPasteboard(text)
-            }
-            if let type = dict["type"] as? String, type == "drag" {
+            case "copy":
+                if let text = dict["text"] as? String {
+                    copyToPasteboard(text)
+                }
+            case "drag":
                 beginWindowDrag()
+            case "settings":
+                applyWebSettings(dict)
+            case "eval":
+                pushSoulverResult(soulverPayload(from: dict))
+            default:
+                break
             }
         }
     }
 
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage,
+        replyHandler: @escaping (Any?, String?) -> Void
+    ) {
+        guard message.name == "soulver" else {
+            replyHandler(nil, "unknown handler")
+            return
+        }
+        replyHandler(soulverPayload(from: message.body), nil)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webReady = true
-        focusMath()
+        disableWebViewScrolling(webView)
+        focusInput()
         for delay in [0.05, 0.12, 0.3] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.focusMath()
+                self?.focusInput()
             }
         }
     }
@@ -128,7 +182,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
     private func build() {
         let panel = OverlayPanel(
             contentRect: NSRect(x: 0, y: 0, width: overlayWidth, height: overlayMinHeight),
-            styleMask: [.borderless, .fullSizeContentView],
+            styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -144,16 +198,48 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         panel.becomesKeyOnlyIfNeeded = false
         installEscapeMonitor()
         installDragMonitor()
+        installClickAwayMonitors()
+        observeSettings()
 
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = WKWebsiteDataStore.nonPersistent()
         config.userContentController.add(self, name: "instant")
+        config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "soulver")
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        let sigFigs = AppSettings.shared.significantFigures
+        let draftSeconds = AppSettings.shared.draftSeconds
+        let defaultUnits = AppSettings.shared.defaultUnitsJSON()
         let boot = WKUserScript(
             source: """
-            window.__INSTANT_QUICK = true;
+            window.__INSTANT_NATIVE = true;
             window.__INSTANT_KEYS = [];
+            window.__INSTANT_HELD = '';
+            window.__INSTANT_META = false;
+            window.__INSTANT_SETTINGS = { sigFigs: \(sigFigs), draftSeconds: \(draftSeconds), defaultUnits: \(defaultUnits) };
+            window.__instantNativeResult = window.__instantNativeResult || function (reply) {
+              window.__SOULVER_LAST = reply;
+              window.dispatchEvent(new CustomEvent('instant-soulver', { detail: reply }));
+            };
+            window.__instantSelectedText = function () {
+              var el = document.querySelector('.quick-plain');
+              if (el && el.selectionStart != null && el.selectionEnd > el.selectionStart) {
+                return el.value.slice(el.selectionStart, el.selectionEnd);
+              }
+              var ae = document.activeElement;
+              if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && ae.selectionEnd > ae.selectionStart) {
+                return ae.value.slice(ae.selectionStart, ae.selectionEnd);
+              }
+              var sel = window.getSelection();
+              return (sel && sel.toString()) || '';
+            };
+            window.__instantRememberText = function () {
+              var live = window.__instantSelectedText();
+              if (live) window.__INSTANT_HELD = live;
+              else if (!window.__INSTANT_META) window.__INSTANT_HELD = '';
+            };
             document.documentElement.classList.add('quick-native');
+            document.documentElement.style.overflow = 'hidden';
             window.addEventListener('keydown', function (e) {
               if (e.key === 'Escape' || e.keyCode === 27) {
                 e.preventDefault();
@@ -161,17 +247,47 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
                 try { window.webkit.messageHandlers.instant.postMessage('dismiss'); } catch (err) {}
                 return;
               }
+              if (e.key === 'Meta' || e.key === 'Control') window.__INSTANT_META = true;
+              if (e.metaKey || e.ctrlKey) window.__instantRememberText();
+              if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C' || e.keyCode === 67)) {
+                var text = window.__instantSelectedText() || window.__INSTANT_HELD || '';
+                if (text) {
+                  e.preventDefault();
+                  e.stopImmediatePropagation();
+                  try { window.webkit.messageHandlers.instant.postMessage({ type: 'copy', text: text }); } catch (err) {}
+                  return;
+                }
+              }
               var field = document.querySelector('.quick-plain');
               if (field && document.activeElement !== field && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 window.__INSTANT_KEYS.push(e.key);
               }
             }, true);
+            window.addEventListener('keyup', function (e) {
+              if (e.key === 'Meta' || e.key === 'Control') window.__INSTANT_META = false;
+              window.__instantRememberText();
+            }, true);
+            document.addEventListener('select', window.__instantRememberText, true);
+            document.addEventListener('mouseup', window.__instantRememberText, true);
+            window.addEventListener('copy', function (e) {
+              var text = window.__instantSelectedText() || window.__INSTANT_HELD || '';
+              if (!text) return;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              if (e.clipboardData) e.clipboardData.setData('text/plain', text);
+              try { window.webkit.messageHandlers.instant.postMessage({ type: 'copy', text: text }); } catch (err) {}
+            }, true);
+            window.addEventListener('wheel', function (e) {
+              var t = e.target;
+              if (t && t.closest && t.closest('.tape')) return;
+              e.preventDefault();
+            }, { passive: false, capture: true });
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
         config.userContentController.addUserScript(boot)
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: overlayWidth, height: overlayMinHeight), configuration: config)
+        let web = OverlayWebView(frame: NSRect(x: 0, y: 0, width: overlayWidth, height: overlayMinHeight), configuration: config)
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
         web.setValue(false, forKey: "drawsBackground")
@@ -183,7 +299,9 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         web.layer?.backgroundColor = NSColor.clear.cgColor
         web.layer?.cornerRadius = 12
         web.layer?.masksToBounds = true
+        #if DEBUG
         if #available(macOS 13.3, *) { web.isInspectable = true }
+        #endif
         panel.contentView = web
         self.web = web
         self.panel = panel
@@ -218,7 +336,7 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         loadFallback(from: webView)
     }
 
-    private func loadFallback(from webView: WKWebView) {
+    private func loadFallback(from _: WKWebView) {
         if fallback == nil {
             let root = OverlayView(onDismiss: { [weak self] in self?.hide() })
             let host = NSHostingView(rootView: root)
@@ -230,7 +348,6 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
             panel?.contentView = fallback
             applySize(height: overlayMinHeight)
         }
-        _ = webView
     }
 
     private func bundledQuickURL() -> URL? {
@@ -257,6 +374,22 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         if body.hasPrefix("height:") {
             let raw = Double(body.dropFirst("height:".count)) ?? Double(overlayMinHeight)
             applySize(height: CGFloat(raw))
+            return
+        }
+        if body.hasPrefix("sigFigs:") {
+            let n = Int(body.dropFirst("sigFigs:".count)) ?? AppSettings.defaultSigFigs
+            AppSettings.shared.setSignificantFigures(n, notifyWeb: false)
+            return
+        }
+        if body.hasPrefix("eval:") {
+            let json = String(body.dropFirst("eval:".count))
+            pushSoulverResult(soulverPayload(from: json))
+            return
+        }
+        if body.hasPrefix("{"), let data = body.data(using: .utf8),
+           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           dict["type"] as? String == "eval" || dict["expr"] != nil {
+            pushSoulverResult(soulverPayload(from: dict))
         }
     }
 
@@ -265,24 +398,29 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    private func notifyWebWillHide() {
+        web?.evaluateJavaScript("if (window.__instantWillHide) window.__instantWillHide();")
+    }
+
     private func resetAndFocus() {
         guard let web else { return }
         panel?.makeFirstResponder(web)
         web.evaluateJavaScript("""
         (function () {
           if (window.__instantReset) window.__instantReset();
-          var el = document.querySelector('.quick-plain') || document.querySelector('math-field');
+          var el = document.querySelector('.quick-plain');
           if (el) { el.focus(); if (window.__instantFocus) window.__instantFocus(); }
+          if (window.__instantSize) window.__instantSize();
         })()
         """)
     }
 
-    private func focusMath() {
+    private func focusInput() {
         guard let web else { return }
         panel?.makeFirstResponder(web)
         web.evaluateJavaScript("""
         (function () {
-          var el = document.querySelector('.quick-plain') || document.querySelector('math-field');
+          var el = document.querySelector('.quick-plain');
           if (el) { el.focus(); if (window.__instantFocus) window.__instantFocus(); }
         })()
         """)
@@ -292,10 +430,29 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         guard let panel else { return }
         let h = min(max(height.rounded(.up), overlayMinHeight), 420)
         var frame = panel.frame
-        let oldH = frame.height
         frame.size = NSSize(width: overlayWidth, height: h)
-        frame.origin.y += oldH - h
+        if let screen = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            if frame.maxY > screen.maxY {
+                frame.origin.y = screen.maxY - h
+            }
+            if frame.origin.y < screen.minY {
+                frame.origin.y = screen.minY
+            }
+        }
         panel.setFrame(frame, display: true)
+    }
+
+    private func disableWebViewScrolling(_ web: WKWebView) {
+        func walk(_ view: NSView) {
+            if let sv = view as? NSScrollView {
+                sv.hasVerticalScroller = false
+                sv.hasHorizontalScroller = false
+                sv.verticalScrollElasticity = .none
+                sv.horizontalScrollElasticity = .none
+            }
+            for child in view.subviews { walk(child) }
+        }
+        walk(web)
     }
 
     private func beginWindowDrag() {
@@ -336,6 +493,21 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         }
     }
 
+    private func installClickAwayMonitors() {
+        guard clickAwayMonitor == nil else { return }
+        clickAwayMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard self?.panel?.isVisible == true else { return }
+            self?.hide()
+        }
+        clickAwayLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isVisible, event.window !== panel else {
+                return event
+            }
+            self.hide()
+            return event
+        }
+    }
+
     private func position() {
         guard let panel, let screen = NSScreen.main?.visibleFrame else { return }
         let size = panel.frame.size
@@ -343,11 +515,120 @@ final class OverlayController: NSObject, WKNavigationDelegate, WKScriptMessageHa
         let y = screen.minY + screen.height * 0.72 - size.height
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
+
+    private func observeSettings() {
+        guard settingsObserver == nil else { return }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .instantSettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.pushSettingsToWeb()
+        }
+    }
+
+    private func pushSettingsToWeb() {
+        let payload = settingsJavaScriptObject()
+        web?.evaluateJavaScript(
+            "window.__INSTANT_SETTINGS = \(payload); if (window.__instantApplySettings) window.__instantApplySettings(\(payload));"
+        )
+    }
+
+    private func settingsJavaScriptObject() -> String {
+        let n = AppSettings.shared.significantFigures
+        let d = AppSettings.shared.draftSeconds
+        let units = AppSettings.shared.defaultUnitsJSON()
+        return "{ sigFigs: \(n), draftSeconds: \(d), defaultUnits: \(units) }"
+    }
+
+    private func applyWebSettings(_ dict: [String: Any]) {
+        guard let n = intValue(dict["sigFigs"]) else { return }
+        AppSettings.shared.setSignificantFigures(n, notifyWeb: false)
+    }
+
+    private func soulverPayload(from body: Any) -> [String: Any] {
+        let dict = dictionary(from: body)
+        let id = intValue(dict["id"]) ?? 0
+        let expr = dict["expr"] as? String ?? ""
+        let sigFigs = intValue(dict["sigFigs"]) ?? AppSettings.shared.significantFigures
+        let answer = SoulverEval.evaluate(
+            expr,
+            ans: doubleValue(dict["ans"]),
+            variables: stringKeyedDoubles(dict["variables"]),
+            sigFigs: sigFigs
+        )
+        let display = answer?.display ?? ""
+        var payload: [String: Any] = [
+            "id": id,
+            "expr": expr,
+            "display": display,
+        ]
+        if let n = answer?.number, n.isFinite {
+            payload["n"] = n
+        } else {
+            payload["n"] = NSNull()
+        }
+        return payload
+    }
+
+    private func pushSoulverResult(_ payload: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        web?.evaluateJavaScript("window.__instantNativeResult && window.__instantNativeResult(\(json));")
+    }
+
+    private func dictionary(from body: Any) -> [String: Any] {
+        if let dict = body as? [String: Any] { return dict }
+        if let s = body as? String {
+            let json = s.hasPrefix("eval:") ? String(s.dropFirst("eval:".count)) : s
+            if let data = json.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return obj
+            }
+            if !s.isEmpty, s != "eval:" { return ["expr": s] }
+        }
+        return [:]
+    }
+
+    private func intValue(_ any: Any?) -> Int? {
+        if let i = any as? Int { return i }
+        if let d = any as? Double { return intFromDouble(d) }
+        if let n = any as? NSNumber { return intFromDouble(n.doubleValue) }
+        return nil
+    }
+
+    private func intFromDouble(_ d: Double) -> Int? {
+        guard d.isFinite, d >= Double(Int.min), d <= Double(Int.max) else { return nil }
+        return Int(d)
+    }
+
+    private func doubleValue(_ any: Any?) -> Double? {
+        if any == nil || any is NSNull { return nil }
+        if let d = any as? Double { return d.isFinite ? d : nil }
+        if let i = any as? Int { return Double(i) }
+        if let n = any as? NSNumber {
+            let d = n.doubleValue
+            return d.isFinite ? d : nil
+        }
+        return nil
+    }
+
+    private func stringKeyedDoubles(_ any: Any?) -> [String: Double] {
+        guard let dict = any as? [String: Any] else { return [:] }
+        var out: [String: Double] = [:]
+        for (key, value) in dict {
+            if let n = doubleValue(value) { out[key] = n }
+        }
+        return out
+    }
 }
 
 struct OverlayView: View {
     var onDismiss: () -> Void
     @State private var text = ""
+    @State private var copied = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -357,14 +638,15 @@ struct OverlayView: View {
                 .font(.system(size: 22, weight: .regular, design: .default))
                 .focused($focused)
                 .onSubmit { submit() }
-            Text(answer(for: text))
-                .font(.system(size: 22, weight: .regular, design: .default).monospacedDigit())
-                .foregroundStyle(Color(red: 0.11, green: 0.48, blue: 0.30))
+            Text(copied ? "copied to clipboard" : answer(for: text))
+                .font(.system(size: copied ? 13 : 22, weight: .regular, design: .default).monospacedDigit())
+                .foregroundStyle(copied ? Color.secondary : Color(red: 0.11, green: 0.48, blue: 0.30))
                 .lineLimit(1)
                 .frame(minWidth: 72, alignment: .trailing)
+                .onTapGesture { copyAnswer() }
         }
         .padding(.horizontal, 18)
-        .frame(maxWidth: .infinity, minHeight: 58, maxHeight: 58)
+        .frame(maxWidth: .infinity, minHeight: 72, maxHeight: 72)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onAppear { focused = true }
@@ -375,15 +657,29 @@ struct OverlayView: View {
     }
 
     private func answer(for text: String) -> String {
+        if let soulver = SoulverEval.evaluate(text) { return soulver.display }
         guard let v = MathEval.evaluate(text) else { return "" }
         return MathEval.format(v)
     }
 
+    private func copyAnswer() {
+        let shown = answer(for: text)
+        guard !shown.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(shown, forType: .string)
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            copied = false
+        }
+    }
+
     private func submit() {
-        if let v = MathEval.evaluate(text) {
+        let shown = answer(for: text)
+        if !shown.isEmpty {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(MathEval.format(v), forType: .string)
+            NSPasteboard.general.setString(shown, forType: .string)
         }
         text = ""
+        copied = false
     }
 }

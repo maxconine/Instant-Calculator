@@ -1,13 +1,25 @@
 import type { Value } from './types'
 import { evalScientific, stitchConstants, wrapBareFunctions, type AngleMode } from './scientific'
+import { tryConvert, type DefaultUnits } from './units'
 
 export type { AngleMode }
 
 const NLP_WORDS =
   /\b(of|off|from|today|tomorrow|yesterday|tax|tip|people|nights|was|until|between|per|earnings|lunch|miles|weeks?|days?|hours?|months?)\b/i
 
-export function looksLikeLatex(s: string): boolean {
+function looksLikeLatex(s: string): boolean {
   return /\\[a-zA-Z]+|[\^_]\{|\\frac|\\sqrt/.test(s)
+}
+
+/** Drop leading "what is" / trailing "?" so "what is 40% of 90" can use the existing percent-of path. */
+export function unwrapQuestion(text: string): string {
+  const src = text.trim()
+  if (!src) return src
+  const stripped = src
+    .replace(/\s*\?+\s*$/g, '')
+    .replace(/^(?:what(?:'s|\s+is|s)|how\s+much\s+is|calculate|compute)\s+/i, '')
+    .trim()
+  return stripped || src
 }
 
 function hasNlpWords(s: string): boolean {
@@ -17,8 +29,6 @@ function hasNlpWords(s: string): boolean {
     .replace(/\\[a-zA-Z]+/g, ' ')
   return NLP_WORDS.test(t) || /\bin\b/i.test(t.replace(/\bsin\b|\bmin\b|\binfinity\b/gi, ''))
 }
-
-export { hasNlpWords }
 
 export function latexToAscii(latex: string): string {
   let s = latex.trim()
@@ -213,12 +223,35 @@ function grabParen(s: string, open: number): { inner: string; end: number } | nu
 
 export function tryPlainMath(
   text: string,
-  ctx: { ans?: number; angleMode?: AngleMode; variables?: Record<string, number> } = {},
+  ctx: {
+    ans?: number
+    angleMode?: AngleMode
+    variables?: Record<string, number>
+    defaultUnits?: DefaultUnits
+  } = {},
 ): Value | null {
-  const src = text.trim()
+  const src = unwrapQuestion(text)
   if (!src) return null
+  const converted = tryConvert(src, ctx.defaultUnits)
+  if (converted) return converted
   const cleaned = src.replace(/\d+(?:\.\d+)?\s*%\s*of\b/gi, (m) => m.replace(/\s*of\b/i, ''))
   if (hasNlpWords(cleaned) && !looksLikeLatex(src)) return null
   const ascii = looksLikeLatex(src) ? latexToAscii(src) : src
-  return evalScientific(ascii, ctx)
+  const direct = evalScientific(ascii, ctx)
+  if (direct) return direct
+
+  // Nested so production minify cannot collide with mathjs top-level names.
+  let depth = 0
+  let minDepth = 0
+  for (const ch of ascii) {
+    if (ch === '(') depth++
+    else if (ch === ')') {
+      depth--
+      if (depth < minDepth) minDepth = depth
+    }
+  }
+  const leading = -minDepth
+  const trailing = depth + leading
+  if (!leading && !trailing) return null
+  return evalScientific(`${'('.repeat(leading)}${ascii}${')'.repeat(trailing)}`, ctx)
 }

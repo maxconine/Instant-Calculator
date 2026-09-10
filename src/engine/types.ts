@@ -1,9 +1,12 @@
+import type { DefaultUnits } from './units'
+
 export type ValueKind = 'number' | 'text'
 
 export interface Value {
   kind: ValueKind
   n: number
   text?: string
+  unit?: string
 }
 
 export type LineKind = 'empty' | 'expression' | 'assignment'
@@ -13,10 +16,10 @@ export interface LineResult {
   kind: LineKind
   value?: Value
   display: string
+  /** Simplified exact form when one exists (e.g. `2sqrt(3)`). */
+  exact?: string
   error?: string
   variable?: string
-  tags: string[]
-  dependsOn: string[]
 }
 
 export interface SheetInputLine {
@@ -27,4 +30,6 @@ export interface EvaluateOptions {
   angleMode?: 'deg' | 'rad'
   ans?: number
   fractionMode?: boolean
+  sigFigs?: number
+  defaultUnits?: DefaultUnits
 }

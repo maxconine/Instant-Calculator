@@ -1,1 +1,0 @@
-import{a as e,i as t,n,r}from"./QuickCalc-c54geqX1.js";var i=e(),a=t(),o=r();(0,a.createRoot)(document.getElementById(`root`)).render((0,o.jsx)(i.StrictMode,{children:(0,o.jsx)(n,{})}));

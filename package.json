@@ -2,19 +2,29 @@
   "name": "instantsolver",
   "private": true,
   "version": "2.0.0",
+  "description": "A Spotlight-style scientific calculator for Mac",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxconine/Instant-Calculator.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:scientific": "vitest run src/engine/scientific.test.ts",
+    "test:units": "vitest run src/engine/units.test.ts",
     "lint": "oxlint",
     "preview": "vite preview",
-    "mac": "zsh macos/build.sh"
+    "mac": "zsh macos/build.sh",
+    "mac:install": "zsh macos/build.sh --install"
   },
   "dependencies": {
     "mathjs": "^15.2.0",
-    "mathlive": "^0.110.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

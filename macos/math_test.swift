@@ -1,5 +1,7 @@
 import Foundation
 
+/// Standalone smoke test for MathEval. Not part of the app target.
+///   swiftc macos/MathEval.swift macos/math_test.swift -o /tmp/instant-math-test && /tmp/instant-math-test
 @main
 enum MathTest {
     static func main() {

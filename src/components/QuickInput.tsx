@@ -1,10 +1,11 @@
-import { useEffect, useRef, type KeyboardEvent, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from 'react'
 
 export interface QuickInputHandle {
   insert: (chunk: string) => void
   focus: () => void
   setValue: (text: string) => void
   element: () => HTMLInputElement | null
+  highlighted: () => string
 }
 
 interface Props {
@@ -22,7 +23,6 @@ const TOKEN_REPLACEMENTS: [RegExp, string][] = [
   [/\btheta\b/gi, 'θ'],
   [/\binfty\b/gi, '∞'],
   [/\binf\b/gi, '∞'],
-  [/\bsqrt\b/gi, '√'],
   [/\bcbrt\b/gi, '∛'],
 ]
 
@@ -38,16 +38,51 @@ function prettyTokens(text: string, ansPlain?: string): string {
 
 export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, handleRef }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const prefixRef = useRef<HTMLSpanElement>(null)
+  const [prefixWidth, setPrefixWidth] = useState(0)
   const onChangeRef = useRef(onChange)
   const onEnterRef = useRef(onEnter)
   const onUpRef = useRef(onUp)
   const onDownRef = useRef(onDown)
   const ansRef = useRef(ansPlain)
+  const heldRef = useRef('')
+  const metaRef = useRef(false)
   onChangeRef.current = onChange
   onEnterRef.current = onEnter
   onUpRef.current = onUp
   onDownRef.current = onDown
   ansRef.current = ansPlain
+
+  const readHighlight = (el: HTMLInputElement | null): string => {
+    if (!el) return ''
+    const start = el.selectionStart ?? 0
+    const end = el.selectionEnd ?? 0
+    return end > start ? el.value.slice(start, end) : ''
+  }
+
+  const rememberHighlight = (el: HTMLInputElement | null) => {
+    const live = readHighlight(el)
+    if (live) heldRef.current = live
+    else if (!metaRef.current) heldRef.current = ''
+  }
+
+  let depth = 0
+  let minDepth = 0
+  for (const ch of value) {
+    if (ch === '(') depth++
+    else if (ch === ')') {
+      depth--
+      if (depth < minDepth) minDepth = depth
+    }
+  }
+  const leadingCount = -minDepth
+  const trailingCount = depth + leadingCount
+  const prefix = leadingCount > 0 ? '('.repeat(leadingCount) : ''
+  const suffix = trailingCount > 0 ? ')'.repeat(trailingCount) : ''
+
+  useLayoutEffect(() => {
+    setPrefixWidth(prefixRef.current?.offsetWidth ?? 0)
+  }, [prefix])
 
   const commit = (raw: string, cursor: number) => {
     const before = prettyTokens(raw.slice(0, cursor), ansRef.current)
@@ -81,6 +116,7 @@ export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, h
         })
       },
       element: () => el,
+      highlighted: () => readHighlight(el) || heldRef.current,
     }
     if (handleRef) handleRef.current = api
     const w = window as Window & { __instantFocus?: () => void; __INSTANT_KEYS?: string[] }
@@ -91,15 +127,32 @@ export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, h
       w.__INSTANT_KEYS = []
     }
     const timers = [0, 40, 120, 280].map((ms) => window.setTimeout(() => el.focus(), ms))
+    const onMeta = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Meta' || e.key === 'Control') metaRef.current = true
+      if (e.metaKey || e.ctrlKey) rememberHighlight(el)
+    }
+    const onMetaUp = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Meta' && e.key !== 'Control') return
+      metaRef.current = false
+      rememberHighlight(el)
+    }
+    window.addEventListener('keydown', onMeta, true)
+    window.addEventListener('keyup', onMetaUp, true)
     return () => {
       for (const t of timers) window.clearTimeout(t)
+      window.removeEventListener('keydown', onMeta, true)
+      window.removeEventListener('keyup', onMetaUp, true)
       if (handleRef) handleRef.current = null
     }
-    // created once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [handleRef])
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const ctrlOnly = e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey
+    const key = e.key.toLowerCase()
+    if (ctrlOnly && (key === 'd' || key === 'f')) {
+      e.preventDefault()
+      return
+    }
     if (e.key === 'Enter') {
       e.preventDefault()
       onEnterRef.current()
@@ -115,21 +168,35 @@ export function QuickInput({ value, ansPlain, onChange, onEnter, onUp, onDown, h
   }
 
   return (
-    <input
-      ref={inputRef}
-      className="quick-plain"
-      value={value}
-      autoFocus
-      autoCapitalize="off"
-      autoCorrect="off"
-      autoComplete="off"
-      spellCheck={false}
-      placeholder="Calculate"
-      onChange={(e) => {
-        const el = e.currentTarget
-        commit(el.value, el.selectionStart ?? el.value.length)
-      }}
-      onKeyDown={onKeyDown}
-    />
+    <div className="quick-field">
+      <div className="quick-ghost" aria-hidden>
+        <span ref={prefixRef} className="quick-inferred">
+          {prefix}
+        </span>
+        <span className="quick-ghost-text">{value}</span>
+        {suffix ? <span className="quick-inferred">{suffix}</span> : null}
+      </div>
+      <input
+        ref={inputRef}
+        className="quick-plain"
+        value={value}
+        size={1}
+        autoFocus
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="Calculate"
+        style={prefixWidth ? { paddingLeft: prefixWidth } : undefined}
+        onChange={(e) => {
+          const el = e.currentTarget
+          commit(el.value, el.selectionStart ?? el.value.length)
+        }}
+        onSelect={(e) => rememberHighlight(e.currentTarget)}
+        onMouseUp={(e) => rememberHighlight(e.currentTarget)}
+        onKeyUp={(e) => rememberHighlight(e.currentTarget)}
+        onKeyDown={onKeyDown}
+      />
+    </div>
   )
 }
